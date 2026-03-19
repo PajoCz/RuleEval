@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Optional diagnostics hooks and observers for RuleEval.</Description>
+    <PackageId>RuleEval.Diagnostics</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Database-backed rule set loading and mapping for RuleEval.</Description>
+    <PackageId>RuleEval.Database</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
+    <ProjectReference Include="../RuleEval.Core/RuleEval.Core.csproj" />
+    <ProjectReference Include="../RuleEval.Caching/RuleEval.Caching.csproj" />
+    <ProjectReference Include="../RuleEval.Database.Abstractions/RuleEval.Database.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+</Project>

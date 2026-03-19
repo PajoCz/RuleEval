@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Database repository and source abstractions for RuleEval.</Description>
+    <PackageId>RuleEval.Database.Abstractions</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

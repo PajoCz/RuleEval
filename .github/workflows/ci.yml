@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore RuleEval.sln
+
+      - name: Build
+        run: dotnet build RuleEval.sln -c Release --no-restore
+
+      - name: Test unit
+        run: dotnet test tests/RuleEval.Tests.Unit/RuleEval.Tests.Unit.csproj -c Release --no-build --collect:"XPlat Code Coverage" --logger trx --results-directory artifacts/tests/unit
+
+      - name: Test integration
+        run: dotnet test tests/RuleEval.Tests.Integration/RuleEval.Tests.Integration.csproj -c Release --no-build --collect:"XPlat Code Coverage" --logger trx --results-directory artifacts/tests/integration
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/tests

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Optional cache abstractions and implementations for RuleEval rule sets.</Description>
+    <PackageId>RuleEval.Caching</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

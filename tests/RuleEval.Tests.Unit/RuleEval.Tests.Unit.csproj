@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Unit tests for RuleEval.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/RuleEval.Core/RuleEval.Core.csproj" />
+    <ProjectReference Include="../../src/RuleEval.Caching/RuleEval.Caching.csproj" />
+    <ProjectReference Include="../../src/RuleEval.Diagnostics/RuleEval.Diagnostics.csproj" />
+    <ProjectReference Include="../../src/RuleEval.Database/RuleEval.Database.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
