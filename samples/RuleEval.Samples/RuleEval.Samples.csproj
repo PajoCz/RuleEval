@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>Sample console app for RuleEval.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
+    <ProjectReference Include="../../src/RuleEval.Core/RuleEval.Core.csproj" />
+    <ProjectReference Include="../../src/RuleEval.Caching/RuleEval.Caching.csproj" />
+    <ProjectReference Include="../../src/RuleEval.Database/RuleEval.Database.csproj" />
+    <ProjectReference Include="../../src/RuleEval.DependencyInjection/RuleEval.DependencyInjection.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+</Project>

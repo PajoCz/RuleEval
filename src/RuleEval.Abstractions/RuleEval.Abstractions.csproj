@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Public contracts and immutable domain model for RuleEval.</Description>
+    <PackageId>RuleEval.Abstractions</PackageId>
+  </PropertyGroup>
+</Project>

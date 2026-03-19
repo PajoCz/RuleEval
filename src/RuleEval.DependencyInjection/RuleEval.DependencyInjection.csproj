@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Optional Microsoft.Extensions.DependencyInjection adapter for RuleEval.</Description>
+    <PackageId>RuleEval.DependencyInjection</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RuleEval.Core/RuleEval.Core.csproj" />
+    <ProjectReference Include="../RuleEval.Caching/RuleEval.Caching.csproj" />
+    <ProjectReference Include="../RuleEval.Database/RuleEval.Database.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>
