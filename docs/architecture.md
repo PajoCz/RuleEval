@@ -1,81 +1,218 @@
-# RuleEval Architecture
+[← README](../README.md)
 
-## 1. Cíle
+# Architektura RuleEval
 
-RuleEval odděluje doménu, evaluaci, diagnostiku, cache a databázovou infrastrukturu tak, aby byl engine:
+## Přehled vrstev
 
-- testovatelný,
-- thread-safe,
-- rozšiřitelný,
-- bez povinného DI containeru,
-- připravený pro NuGet publikaci.
+RuleEval je vrstevnatý rule engine. Každá vrstva je samostatný NuGet balíček — vyšší vrstvy závisí na nižších, nikdy naopak. Závislosti tečou striktně jedním směrem.
 
-## 2. Vrstvy
+```
+┌──────────────────────────────────────────────────────────────┐
+│  RuleEval.Database.DependencyInjection                       │
+│  RuleEval.DependencyInjection                                │  ← DI integrace (volitelné)
+├──────────────────────────────────────────────────────────────┤
+│  RuleEval.Database                                           │  ← DB adaptér (PostgreSQL, SQL Server)
+│  RuleEval.Database.Abstractions                              │
+├──────────────────────────────────────────────────────────────┤
+│  RuleEval.Diagnostics           RuleEval.Caching             │  ← volitelné doplňky
+├──────────────────────────────────────────────────────────────┤
+│  RuleEval  (RuleEval.Core)                                   │  ← evaluační engine + matchery
+├──────────────────────────────────────────────────────────────┤
+│  RuleEval.Abstractions                                       │  ← contracts, doménový model
+└──────────────────────────────────────────────────────────────┘
+```
 
-### RuleEval.Abstractions
-- immutable doménový model,
-- veřejné result typy,
-- doménové výjimky.
+## Závislosti mezi balíčky
 
-### RuleEval.Core
-- builder API,
-- `RuleSetEvaluator`,
-- matcher pipeline,
-- built-in regex/equality/decimal interval matchery,
-- parser `INTERVAL...` syntaxe.
+| Balíček (NuGet ID) | Závisí na |
+|---|---|
+| `RuleEval.Abstractions` | — |
+| `RuleEval` | `RuleEval.Abstractions` |
+| `RuleEval.Caching` | `RuleEval.Abstractions` |
+| `RuleEval.Diagnostics` | `RuleEval.Abstractions` |
+| `RuleEval.DependencyInjection` | `RuleEval`, `RuleEval.Caching` |
+| `RuleEval.Database.Abstractions` | `RuleEval.Abstractions` |
+| `RuleEval.Database` | `RuleEval`, `RuleEval.Caching`, `RuleEval.Database.Abstractions` |
+| `RuleEval.Database.DependencyInjection` | `RuleEval.DependencyInjection`, `RuleEval.Database` |
 
-### RuleEval.Diagnostics
-- volitelné observer hooky nad result modely.
+## Doménový model (`RuleEval.Abstractions`)
 
-### RuleEval.Caching
-- explicitní cache key model,
-- `NoCacheRuleSetCache`,
-- `MemoryRuleSetCache`.
+```
+RuleSet
+ ├── Key                    (string)
+ ├── InputFields            (ImmutableArray<string>)
+ ├── Rules                  (ImmutableArray<Rule>)
+ │    └── Rule
+ │         ├── Index        (int)
+ │         ├── Conditions   (ImmutableArray<Condition>)
+ │         │    └── Condition: FieldName, Expected, MatcherKey
+ │         ├── Outputs      (ImmutableArray<OutputValue>)
+ │         │    └── OutputValue: FieldName, RawValue, Index
+ │         └── PrimaryKey?  (PrimaryKeyValue)
+ └── Metadata               (ImmutableDictionary<string, string?>)
+```
 
-### RuleEval.Database.Abstractions
-- kontrakty pro source/repository,
-- DTO reprezentace DB metadata + datových řádků.
+Celý model je **immutable** — po sestavení přes `RuleSetBuilder` nelze měnit. To zaručuje thread-safety evaluátoru bez jakéhokoli zamykání.
 
-### RuleEval.Database
-- mapování DTO -> `RuleSet`,
-- MSSQL / PostgreSQL source adaptery,
-- repository skládající source + cache + evaluator.
+## Evaluační flow
 
-### RuleEval.DependencyInjection
-- pouze volitelný adapter pro `Microsoft.Extensions.DependencyInjection`.
+```
+EvaluationContext  ──┐
+EvaluationOptions  ──┤──►  RuleSetEvaluator.EvaluateFirst / EvaluateAll
+RuleSet            ──┘            │
+                                  ▼
+                           pro každé Rule (v pořadí):
+                             pro každou Condition:
+                               MatcherRegistry.Match(condition, actualValue)
+                                 └── IConditionMatcher.CanHandle → Match
+                                       ├── DecimalIntervalConditionMatcher
+                                       ├── RegexConditionMatcher
+                                       └── EqualityConditionMatcher  (fallback)
+                                  │
+                             vše matched? ──► zaznamenat do kandidátů
+                                  │
+                           EvaluateFirst: vrátit prvního kandidáta
+                           EvaluateAll:   vrátit všechny kandidáty
+```
 
-## 3. Kompatibilita vůči RuleEvaluatoru
+### Výsledkové typy
 
-Zachovaná semantika:
+| Typ | Popis |
+|---|---|
+| `EvaluationResult` | Výsledek `EvaluateFirst`; obsahuje `Status`, `Match?`, `Trace?` |
+| `EvaluationMatchesResult` | Výsledek `EvaluateAll`; obsahuje `Status`, `Matches`, `Trace?` |
+| `EvaluationStatus.Matched` | Nalezena shoda |
+| `EvaluationStatus.NoMatch` | Žádná shoda — běžný stav, ne výjimka |
+| `EvaluationStatus.AmbiguousMatch` | Více shod (vyžaduje `EvaluationOptions.DetectAmbiguity: true`) |
+| `EvaluationStatus.InvalidInput` | Špatný počet vstupů |
 
-- input conditions se validují v pořadí,
-- v jednom pravidle jsou AND,
+## Matchery (`RuleEval.Core`)
+
+Matchery implementují `IConditionMatcher` a jsou registrovány v `MatcherRegistry`.
+
+```csharp
+public interface IConditionMatcher
+{
+    string Key { get; }
+    bool CanHandle(Condition condition);
+    ConditionMatchResult Match(ConditionMatchContext context);
+}
+```
+
+### Vestavěné matchery
+
+| Matcher | `MatcherKey` | Formát hodnoty |
+|---|---|---|
+| `DecimalIntervalConditionMatcher` | `interval` / auto | `INTERVAL<min;max>`, `INTERVAL(min;max>` apod. |
+| `RegexConditionMatcher` | `regex` / auto | Regulární výraz (např. `.*Perspektiva.*`) |
+| `EqualityConditionMatcher` | `eq` / auto | Přesná shoda (`string.Equals`, `IComparable`) |
+
+Při `MatcherKey = "auto"` matchery soutěží přes `CanHandle` — první, který hlásí `true`, vyhrává (pořadí: `DecimalInterval` → `Regex` → `Equality`).
+
+### Vlastní matcher
+
+```csharp
+public sealed class PrefixMatcher : IConditionMatcher
+{
+    public string Key => "prefix";
+
+    public bool CanHandle(Condition condition)
+        => condition.MatcherKey == Key;
+
+    public ConditionMatchResult Match(ConditionMatchContext context)
+        => (context.ActualValue?.ToString() ?? string.Empty)
+            .StartsWith(context.Condition.Expected?.ToString() ?? string.Empty, StringComparison.Ordinal)
+            ? ConditionMatchResult.Matched(Key)
+            : ConditionMatchResult.NotMatched(Key);
+}
+
+var registry = MatcherRegistry.CreateDefault().WithMatcher(new PrefixMatcher());
+var evaluator = new RuleSetEvaluator(registry);
+```
+
+## Cache (`RuleEval.Caching`)
+
+```csharp
+public interface IRuleSetCache
+{
+    ValueTask<RuleSet?> GetAsync(RuleSetCacheKey key, CancellationToken cancellationToken = default);
+    ValueTask SetAsync(RuleSetCacheKey key, RuleSet ruleSet, TimeSpan ttl, CancellationToken cancellationToken = default);
+}
+```
+
+| Implementace | Chování |
+|---|---|
+| `NoCacheRuleSetCache` | Vždy `null` — každé volání načte z DB |
+| `MemoryRuleSetCache` | In-process cache s TTL expirací |
+
+`RuleSetCacheKey` obsahuje `Namespace` + `Key`, což umožňuje izolovat cache mezi různými repozitáři.
+
+## Databázová vrstva (`RuleEval.Database`)
+
+`RuleSetRepository` orchestruje celý životní cyklus načtení a vyhodnocení:
+
+```
+IRuleSetSource.LoadAsync(key)
+       │
+       ▼
+DbRuleSetDefinition  ──►  DbRuleSetMapper.Map()  ──►  RuleSet
+                                                          │
+                                              IRuleSetCache.SetAsync()
+                                                          │
+                                              RuleSetEvaluator.EvaluateFirst()
+```
+
+### DB sources
+
+| Třída | Provider |
+|---|---|
+| `PostgreSqlRuleSetSource` | PostgreSQL přes Npgsql |
+| `SqlServerRuleSetSource` | SQL Server — provider-neutral přes `System.Data.Common.DbConnection` |
+
+Core (`RuleEval`) **neví nic o databázi** — závislost teče pouze shora dolů.
+
+## Error model
+
+| Typ | Kdy se používá |
+|---|---|
+| `EvaluationResult` / `EvaluationMatchesResult` | Běžné runtime výsledky včetně `NoMatch` |
+| `InvalidRuleDefinitionException` | Chyba při sestavování `RuleSet` (špatná definice pravidla) |
+| `InvalidConditionFormatException` | Žádný matcher nezvládl zpracovat podmínku |
+| `DatabaseLoadException` | Selhání načtení z DB |
+
+`NoMatch` **není výjimka** — je to očekávaný business výsledek.
+
+## Kompatibilita vůči původnímu projektu RuleEvaluator
+
+### Zachovaná semantika
+
+- input conditions se vyhodnocují v pořadí,
+- všechny conditions v jednom pravidle jsou AND,
 - output buňky se při matchování ignorují,
 - regex je full-string match,
 - `INTERVAL<10;15)` a podobné tvary fungují case-insensitive,
 - output string jako `C2/240` zůstává raw.
 
-Změny k lepšímu:
+### Mapování API
 
-- žádný Castle Windsor,
-- žádné `params object[]` jako jediné veřejné API,
-- očekávané stavy jsou result modely, ne obecné výjimky,
-- cache není svázaná s repository implementací,
-- mapování DB je explicitní podle metadata definic, ne podle `Dictionary.Values` pořadí.
+| RuleEvaluator | RuleEval |
+|---|---|
+| `RuleItems` | `RuleSet` |
+| `RuleItem` | `Rule` |
+| `CellInputOutputType` | `RuleFieldRole` |
+| `Find()` | `EvaluateFirst()` |
+| `FindAll()` | `EvaluateAll()` |
+| `IRuleItemsCall` | `RuleTrace` + `IRuleEvaluationObserver` |
+| Castle Windsor factory chain | `MatcherRegistry` + constructor injection |
+| `RuleItemsRepository` | `RuleSetRepository` |
 
-## 4. Error model
+## Hlavní design rozhodnutí
 
-- **Expected runtime states:** `EvaluationResult` / `EvaluationMatchesResult`.
-- **Exceptional states:** `InvalidRuleDefinitionException`, `InvalidConditionFormatException`, `DatabaseLoadException`.
-
-Tím se odděluje běžný business výsledek (`NoMatch`) od skutečné chyby návrhu nebo infrastruktury.
-
-## 5. Výkon a budoucí rozvoj
-
-Aktuální evaluace používá ordered lineární scan, ale návrh nechává prostor pro:
-
-- compiled match plans,
-- indexing,
-- preprocessing rules,
-- pokročilejší cache strategiie,
-- observability integrations.
+| Rozhodnutí | Důvod |
+|---|---|
+| Immutable doménový model | Thread-safety bez zámků; evaluátor lze sdílet jako singleton |
+| `NoMatch` jako stav, ne výjimka | `NoMatch` je v produkci očekávaný výsledek, ne chyba |
+| `AmbiguousMatch` opt-in | Ordered first-match je výchozí chování; detekce ambiguity má nenulový overhead |
+| Žádný Castle Windsor | Eliminuje povinnou závislost na IoC kontejneru; `MatcherRegistry` řeší discovery explicitně |
+| Separátní `RuleEval.Abstractions` | Knihovny třetích stran mohou referovat pouze contracts bez runtime závislosti |
+| Diagnostics opt-in | `EvaluationOptions.CaptureDiagnostics: true` — při vypnutém zachytávání je overhead nulový |

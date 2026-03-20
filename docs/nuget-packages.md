@@ -1,3 +1,5 @@
+[← README](../README.md)
+
 # RuleEval NuGet Packages
 
 This document describes all NuGet packages produced by the RuleEval project,
@@ -93,7 +95,9 @@ RuleEval                        → RuleEval.Abstractions
 RuleEval.Caching                → RuleEval.Abstractions
 RuleEval.Diagnostics            → RuleEval.Abstractions
 RuleEval.Database.Abstractions  → RuleEval.Abstractions
-RuleEval.Database               → RuleEval + RuleEval.Caching + RuleEval.Database.Abstractions + Npgsql
+RuleEval.Database               → RuleEval + RuleEval.Caching + RuleEval.Database.Abstractions
+                                  (+ Npgsql for PostgreSqlRuleSetSource;
+                                   SqlServerRuleSetSource uses System.Data.Common — no extra dep)
 RuleEval.DependencyInjection    → RuleEval + RuleEval.Caching + Microsoft.Extensions.DependencyInjection.Abstractions
 RuleEval.Database.DependencyInjection → RuleEval.DependencyInjection + RuleEval.Database
 ```
@@ -120,15 +124,15 @@ RuleEval.Database.DependencyInjection → RuleEval.DependencyInjection + RuleEva
 2. In the GitHub repository go to **Settings → Secrets and variables → Actions**.
 3. Add a new repository secret named `NUGET_API_KEY` with the key value.
 
-## Future: database provider split
+## Database providers
 
-`RuleEval.Database` currently bundles both the provider-neutral mapper/repository
-and the Npgsql (PostgreSQL) provider together. Once a second provider (SQL Server,
-SQLite, …) is added, the package will be split into:
+`RuleEval.Database` bundles both the provider-neutral mapper/repository and two
+concrete providers:
 
-- `RuleEval.Database` – provider-neutral mapper + repository contracts
-- `RuleEval.Database.PostgreSql` – Npgsql-backed `PostgreSqlRuleSetSource`
-- `RuleEval.Database.SqlServer` – Microsoft.Data.SqlClient-backed source
+| Class | Provider |
+|---|---|
+| `PostgreSqlRuleSetSource` | PostgreSQL via **Npgsql** |
+| `SqlServerRuleSetSource` | SQL Server via `System.Data.Common.DbConnection` (no extra NuGet dependency) |
 
-This split preserves backward compatibility because consumers will only need to
-swap `RuleEval.Database` → `RuleEval.Database` + `RuleEval.Database.PostgreSql`.
+Additional providers (SQLite, Oracle, …) can be added by implementing
+`IRuleSetSource` from `RuleEval.Database.Abstractions`.
