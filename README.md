@@ -1,9 +1,10 @@
 # RuleEval
 
-[![NuGet](https://img.shields.io/nuget/v/RuleEval.svg)](https://www.nuget.org/packages/RuleEval)
-[![NuGet](https://img.shields.io/nuget/v/RuleEval.Abstractions.svg)](https://www.nuget.org/packages/RuleEval.Abstractions)
-[![NuGet](https://img.shields.io/nuget/v/RuleEval.DependencyInjection.svg)](https://www.nuget.org/packages/RuleEval.DependencyInjection)
-[![NuGet](https://img.shields.io/nuget/v/RuleEval.Database.svg)](https://www.nuget.org/packages/RuleEval.Database)
+[![RuleEval.Abstractions](https://img.shields.io/nuget/v/RuleEval.Abstractions.svg?label=RuleEval.Abstractions)](https://www.nuget.org/packages/RuleEval.Abstractions)
+[![RuleEval](https://img.shields.io/nuget/v/RuleEval.svg?label=RuleEval)](https://www.nuget.org/packages/RuleEval)
+[![RuleEval.DependencyInjection](https://img.shields.io/nuget/v/RuleEval.DependencyInjection.svg?label=RuleEval.DependencyInjection)](https://www.nuget.org/packages/RuleEval.DependencyInjection)
+[![RuleEval.Database](https://img.shields.io/nuget/v/RuleEval.Database.svg?label=RuleEval.Database)](https://www.nuget.org/packages/RuleEval.Database)
+[![RuleEval.Database.DependencyInjection](https://img.shields.io/nuget/v/RuleEval.Database.DependencyInjection.svg?label=RuleEval.Database.DependencyInjection)](https://www.nuget.org/packages/RuleEval.Database.DependencyInjection)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 📚 Dokumentace: [architecture.md](docs/architecture.md) · [nuget-packages.md](docs/nuget-packages.md) · [publishing-nuget.md](docs/publishing-nuget.md)
@@ -60,14 +61,14 @@ services.AddRuleEval();
 
 ## NuGet balíčky
 
-| Balíček | NuGet | Popis |
+| Projekt | NuGet | Popis |
 |---|---|---|
 | [`RuleEval.Abstractions`](src/RuleEval.Abstractions) | [📦](https://www.nuget.org/packages/RuleEval.Abstractions) | Contracts a immutable doménový model; referujte, pokud píšete knihovny integrující se s RuleEval |
 | [`RuleEval`](src/RuleEval.Core) | [📦](https://www.nuget.org/packages/RuleEval) | Evaluační engine, built-in matchery (`regex`, `INTERVAL`, equality) |
-| [`RuleEval.Caching`](src/RuleEval.Caching) | — | `IRuleSetCache`, `MemoryRuleSetCache`, `NoCacheRuleSetCache` |
-| [`RuleEval.Diagnostics`](src/RuleEval.Diagnostics) | — | `IRuleEvaluationObserver`, observer pattern pro výsledky evaluace |
+| [`RuleEval.Caching`](src/RuleEval.Caching) | — | Interní projekt bez vlastního NuGet; zkompilován do `RuleEval.DependencyInjection` a `RuleEval.Database`. Obsahuje `IRuleSetCache`, `MemoryRuleSetCache`, `NoCacheRuleSetCache` |
+| [`RuleEval.Diagnostics`](src/RuleEval.Diagnostics) | — | Interní projekt bez vlastního NuGet. Obsahuje `IRuleEvaluationObserver`, observer pattern pro výsledky evaluace |
 | [`RuleEval.DependencyInjection`](src/RuleEval.DependencyInjection) | [📦](https://www.nuget.org/packages/RuleEval.DependencyInjection) | `AddRuleEval()` registrace core služeb do `IServiceCollection` |
-| [`RuleEval.Database.Abstractions`](src/RuleEval.Database.Abstractions) | — | `IRuleSetSource`, `IRuleSetRepository` — provider-neutral DB contracts |
+| [`RuleEval.Database.Abstractions`](src/RuleEval.Database.Abstractions) | — | Interní projekt bez vlastního NuGet; zkompilován do `RuleEval.Database`. Obsahuje `IRuleSetSource`, `IRuleSetRepository` — provider-neutral DB contracts |
 | [`RuleEval.Database`](src/RuleEval.Database) | [📦](https://www.nuget.org/packages/RuleEval.Database) | `DbRuleSetMapper`, `RuleSetRepository`, `PostgreSqlRuleSetSource`, `SqlServerRuleSetSource` |
 | [`RuleEval.Database.DependencyInjection`](src/RuleEval.Database.DependencyInjection) | [📦](https://www.nuget.org/packages/RuleEval.Database.DependencyInjection) | `AddRuleEvalDatabase()` registrace DB služeb do `IServiceCollection` |
 
