@@ -56,12 +56,11 @@ services.AddRuleEval();
 |---|---|
 | [`RuleEval.Abstractions`](src/RuleEval.Abstractions) | Contracts a immutable doménový model; referujte, pokud píšete knihovny integrující se s RuleEval |
 | [`RuleEval`](src/RuleEval.Core) | Evaluační engine, built-in matchery (`regex`, `INTERVAL`, equality) |
-| [`RuleEval.Caching`](src/RuleEval.Caching) | `IRuleSetCache`, `MemoryRuleSetCache`, `NoCacheRuleSetCache` |
-| [`RuleEval.Diagnostics`](src/RuleEval.Diagnostics) | `IRuleEvaluationObserver`, observer pattern pro výsledky evaluace |
 | [`RuleEval.DependencyInjection`](src/RuleEval.DependencyInjection) | `AddRuleEval()` registrace core služeb do `IServiceCollection` |
-| [`RuleEval.Database.Abstractions`](src/RuleEval.Database.Abstractions) | `IRuleSetSource`, `IRuleSetRepository` — provider-neutral DB contracts |
 | [`RuleEval.Database`](src/RuleEval.Database) | `DbRuleSetMapper`, `RuleSetRepository`, `PostgreSqlRuleSetSource`, `SqlServerRuleSetSource` |
 | [`RuleEval.Database.DependencyInjection`](src/RuleEval.Database.DependencyInjection) | `AddRuleEvalDatabase()` registrace DB služeb do `IServiceCollection` |
+
+> Interní projekty `RuleEval.Caching`, `RuleEval.Diagnostics` a `RuleEval.Database.Abstractions` nejsou publikovány jako samostatné NuGet balíčky — jejich funkcionalita je zabalena do příslušných veřejných balíčků přes project reference.
 
 ## Dokumentace
 

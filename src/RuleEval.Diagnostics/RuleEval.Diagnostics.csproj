@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- Internal project only — not published as a standalone NuGet package.
+         Functionality is consumed by public packages via project references. -->
+    <IsPackable>false</IsPackable>
     <Description>Optional diagnostics hooks and observer pattern for RuleEval evaluation results (IRuleEvaluationObserver).</Description>
-    <PackageId>RuleEval.Diagnostics</PackageId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
