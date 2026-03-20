@@ -1,6 +1,14 @@
 # RuleEval
 
-Moderní open-source rule engine pro **.NET 8**, navržený jako čistá a produkčně použitelná náhrada za původní projekt RuleEvaluator. Bez Castle Windsor, bez povinného DI frameworku, s jasně oddělenými vrstvami.
+[![NuGet](https://img.shields.io/nuget/v/RuleEval.svg)](https://www.nuget.org/packages/RuleEval)
+[![NuGet](https://img.shields.io/nuget/v/RuleEval.Abstractions.svg)](https://www.nuget.org/packages/RuleEval.Abstractions)
+[![NuGet](https://img.shields.io/nuget/v/RuleEval.DependencyInjection.svg)](https://www.nuget.org/packages/RuleEval.DependencyInjection)
+[![NuGet](https://img.shields.io/nuget/v/RuleEval.Database.svg)](https://www.nuget.org/packages/RuleEval.Database)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+📚 Dokumentace: [architecture.md](docs/architecture.md) · [nuget-packages.md](docs/nuget-packages.md) · [publishing-nuget.md](docs/publishing-nuget.md)
+
+Moderní open-source rule engine pro **.NET 8**
 
 ## Obsah
 
@@ -52,15 +60,16 @@ services.AddRuleEval();
 
 ## NuGet balíčky
 
-| Balíček | Popis |
-|---|---|
-| [`RuleEval.Abstractions`](src/RuleEval.Abstractions) | Contracts a immutable doménový model; referujte, pokud píšete knihovny integrující se s RuleEval |
-| [`RuleEval`](src/RuleEval.Core) | Evaluační engine, built-in matchery (`regex`, `INTERVAL`, equality) |
-| [`RuleEval.DependencyInjection`](src/RuleEval.DependencyInjection) | `AddRuleEval()` registrace core služeb do `IServiceCollection` |
-| [`RuleEval.Database`](src/RuleEval.Database) | `DbRuleSetMapper`, `RuleSetRepository`, `PostgreSqlRuleSetSource`, `SqlServerRuleSetSource` |
-| [`RuleEval.Database.DependencyInjection`](src/RuleEval.Database.DependencyInjection) | `AddRuleEvalDatabase()` registrace DB služeb do `IServiceCollection` |
-
-> Interní projekty `RuleEval.Caching`, `RuleEval.Diagnostics` a `RuleEval.Database.Abstractions` nejsou publikovány jako samostatné NuGet balíčky — jejich funkcionalita je zabalena do příslušných veřejných balíčků přes project reference.
+| Balíček | NuGet | Popis |
+|---|---|---|
+| [`RuleEval.Abstractions`](src/RuleEval.Abstractions) | [📦](https://www.nuget.org/packages/RuleEval.Abstractions) | Contracts a immutable doménový model; referujte, pokud píšete knihovny integrující se s RuleEval |
+| [`RuleEval`](src/RuleEval.Core) | [📦](https://www.nuget.org/packages/RuleEval) | Evaluační engine, built-in matchery (`regex`, `INTERVAL`, equality) |
+| [`RuleEval.Caching`](src/RuleEval.Caching) | — | `IRuleSetCache`, `MemoryRuleSetCache`, `NoCacheRuleSetCache` |
+| [`RuleEval.Diagnostics`](src/RuleEval.Diagnostics) | — | `IRuleEvaluationObserver`, observer pattern pro výsledky evaluace |
+| [`RuleEval.DependencyInjection`](src/RuleEval.DependencyInjection) | [📦](https://www.nuget.org/packages/RuleEval.DependencyInjection) | `AddRuleEval()` registrace core služeb do `IServiceCollection` |
+| [`RuleEval.Database.Abstractions`](src/RuleEval.Database.Abstractions) | — | `IRuleSetSource`, `IRuleSetRepository` — provider-neutral DB contracts |
+| [`RuleEval.Database`](src/RuleEval.Database) | [📦](https://www.nuget.org/packages/RuleEval.Database) | `DbRuleSetMapper`, `RuleSetRepository`, `PostgreSqlRuleSetSource`, `SqlServerRuleSetSource` |
+| [`RuleEval.Database.DependencyInjection`](src/RuleEval.Database.DependencyInjection) | [📦](https://www.nuget.org/packages/RuleEval.Database.DependencyInjection) | `AddRuleEvalDatabase()` registrace DB služeb do `IServiceCollection` |
 
 ## Dokumentace
 
