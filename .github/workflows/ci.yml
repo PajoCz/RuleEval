@@ -16,13 +16,13 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 9.0.x
 
       - name: Restore
-        run: dotnet restore RuleEval.sln
+        run: dotnet restore RuleEval.slnx
 
       - name: Build
-        run: dotnet build RuleEval.sln -c Release --no-restore
+        run: dotnet build RuleEval.slnx -c Release --no-restore
 
       - name: Test unit
         run: dotnet test tests/RuleEval.Tests.Unit/RuleEval.Tests.Unit.csproj -c Release --no-build --collect:"XPlat Code Coverage" --logger trx --results-directory artifacts/tests/unit
