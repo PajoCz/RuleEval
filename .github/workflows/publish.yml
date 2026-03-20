@@ -29,7 +29,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 9.0.x
 
       # Determine the SemVer version from the git tag (vX.Y.Z → X.Y.Z)
       # or from the workflow_dispatch input when triggered manually.
@@ -43,7 +43,7 @@ jobs:
             VERSION="${{ github.event.inputs.version }}"
           fi
           # Basic validation: must match X.Y.Z (with optional pre-release suffix)
-          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+'; then
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z]+)*$'; then
             echo "ERROR: Version '$VERSION' does not match expected format X.Y.Z" >&2
             exit 1
           fi
@@ -51,12 +51,12 @@ jobs:
           echo "Publishing version: $VERSION"
 
       - name: Restore
-        run: dotnet restore RuleEval.sln
+        run: dotnet restore RuleEval.slnx
 
       # Pass /p:Version so that both the assembly version and the NuGet package
       # version reflect the release version derived from the git tag.
       - name: Build
-        run: dotnet build RuleEval.sln -c Release --no-restore /p:Version=${{ steps.version.outputs.VERSION }}
+        run: dotnet build RuleEval.slnx -c Release --no-restore /p:Version=${{ steps.version.outputs.VERSION }}
 
       - name: Test (unit)
         run: dotnet test tests/RuleEval.Tests.Unit/RuleEval.Tests.Unit.csproj -c Release --no-build --logger "console;verbosity=normal"
@@ -67,7 +67,7 @@ jobs:
       # Pack produces .nupkg (library) and .snupkg (symbols) in artifacts/nupkgs/.
       # The companion .snupkg is automatically pushed alongside its .nupkg by dotnet nuget push.
       - name: Pack
-        run: dotnet pack RuleEval.sln -c Release --no-build -o artifacts/nupkgs /p:Version=${{ steps.version.outputs.VERSION }}
+        run: dotnet pack RuleEval.slnx -c Release --no-build -o artifacts/nupkgs /p:Version=${{ steps.version.outputs.VERSION }}
 
       - name: Upload packages as artifacts
         uses: actions/upload-artifact@v4
@@ -79,7 +79,7 @@ jobs:
       # --skip-duplicate prevents failure if the version was already published.
       - name: Publish to NuGet.org
         run: |
-          dotnet nuget push artifacts/nupkgs/*.nupkg \
-            --api-key ${{ secrets.NUGET_API_KEY }} \
+          dotnet nuget push "artifacts/nupkgs/*.nupkg" \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate
