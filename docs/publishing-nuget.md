@@ -2,20 +2,25 @@
 
 # Publikování NuGet balíčků
 
-RuleEval se skládá z **8 samostatných NuGet balíčků** — všechny jsou pod `src/`. Projekty v `tests/`, `benchmarks/` a `samples/` se nepublikují.
+RuleEval se skládá z **5 veřejných NuGet balíčků** — všechny jsou pod `src/`. Projekty v `tests/`, `benchmarks/` a `samples/` se nepublikují. Interní projekty (`RuleEval.Caching`, `RuleEval.Diagnostics`, `RuleEval.Database.Abstractions`) nejsou publikovány jako samostatné balíčky.
 
-## Balíčky
+## Veřejné balíčky
 
 | NuGet ID | Projekt |
 |---|---|
 | `RuleEval.Abstractions` | `src/RuleEval.Abstractions` |
 | `RuleEval` | `src/RuleEval.Core` |
-| `RuleEval.Caching` | `src/RuleEval.Caching` |
-| `RuleEval.Diagnostics` | `src/RuleEval.Diagnostics` |
 | `RuleEval.DependencyInjection` | `src/RuleEval.DependencyInjection` |
-| `RuleEval.Database.Abstractions` | `src/RuleEval.Database.Abstractions` |
 | `RuleEval.Database` | `src/RuleEval.Database` |
 | `RuleEval.Database.DependencyInjection` | `src/RuleEval.Database.DependencyInjection` |
+
+## Interní projekty (nejsou publikovány)
+
+| Projekt | Zahrnut v |
+|---|---|
+| `src/RuleEval.Caching` | `RuleEval.DependencyInjection`, `RuleEval.Database` |
+| `src/RuleEval.Diagnostics` | `RuleEval` |
+| `src/RuleEval.Database.Abstractions` | `RuleEval.Database` |
 
 ## Sdílená metadata — `Directory.Build.props`
 
@@ -49,7 +54,7 @@ Verzi, autora a licence nastavte centrálně v `Directory.Build.props` v kořenu
 ## Lokální pack
 
 ```bash
-# Zabalit všechny publishovatelné balíčky do ./artifacts/
+# Zabalit všechny veřejné balíčky do ./artifacts/
 dotnet pack RuleEval.sln -c Release --output ./artifacts
 ```
 
@@ -58,10 +63,7 @@ Nebo jednotlivě:
 ```bash
 dotnet pack src/RuleEval.Abstractions/RuleEval.Abstractions.csproj -c Release --output ./artifacts
 dotnet pack src/RuleEval.Core/RuleEval.Core.csproj -c Release --output ./artifacts
-dotnet pack src/RuleEval.Caching/RuleEval.Caching.csproj -c Release --output ./artifacts
-dotnet pack src/RuleEval.Diagnostics/RuleEval.Diagnostics.csproj -c Release --output ./artifacts
 dotnet pack src/RuleEval.DependencyInjection/RuleEval.DependencyInjection.csproj -c Release --output ./artifacts
-dotnet pack src/RuleEval.Database.Abstractions/RuleEval.Database.Abstractions.csproj -c Release --output ./artifacts
 dotnet pack src/RuleEval.Database/RuleEval.Database.csproj -c Release --output ./artifacts
 dotnet pack src/RuleEval.Database.DependencyInjection/RuleEval.Database.DependencyInjection.csproj -c Release --output ./artifacts
 ```

@@ -2,21 +2,33 @@
 
 # RuleEval NuGet Packages
 
-This document describes all NuGet packages produced by the RuleEval project,
+This document describes all public NuGet packages produced by the RuleEval project,
 their purpose, and the recommended ways to use them in an application.
 
-## Package overview
+## Public packages
 
 | Package | Description |
 |---|---|
-| `RuleEval` | **Main runtime package.** Evaluation engine + built-in matchers. Start here. |
+| `RuleEval` | **Main runtime package.** Evaluation engine + built-in matchers. Start here. Internal project: `RuleEval.Core`. |
 | `RuleEval.Abstractions` | Public contracts and immutable domain model. For library authors. |
-| `RuleEval.Caching` | `IRuleSetCache` abstraction + `MemoryRuleSetCache` / `NoCacheRuleSetCache`. |
-| `RuleEval.Diagnostics` | Optional observer hooks (`IRuleEvaluationObserver`) for metrics / logging. |
-| `RuleEval.Database.Abstractions` | Database source contracts (`IRuleSetSource`, `IRuleSetRepository`, `DbRuleSetDefinition`). |
-| `RuleEval.Database` | `DbRuleSetMapper`, `RuleSetRepository`, `PostgreSqlRuleSetSource`, `SqlServerRuleSetSource`. |
 | `RuleEval.DependencyInjection` | `AddRuleEval()` extension for `IServiceCollection`. Core only, no DB pull-in. |
+| `RuleEval.Database` | `DbRuleSetMapper`, `RuleSetRepository`, `PostgreSqlRuleSetSource`, `SqlServerRuleSetSource`. |
 | `RuleEval.Database.DependencyInjection` | `AddRuleEvalDatabase<TSource>()` extension. Registers mapper + repository + your source. |
+
+## Internal-only projects (not published to NuGet)
+
+The following projects exist in the solution for internal layering and maintainability,
+but are **not published as standalone NuGet packages**. Their functionality is included
+in the public packages above via project references.
+
+| Internal project | Functionality bundled into |
+|---|---|
+| `RuleEval.Caching` | `RuleEval.DependencyInjection`, `RuleEval.Database` |
+| `RuleEval.Diagnostics` | Available via `RuleEval` / consumed internally |
+| `RuleEval.Database.Abstractions` | `RuleEval.Database` |
+
+> **Note:** `RuleEval.Core` is the internal project name for the main evaluation engine.
+> The public NuGet package ID is `RuleEval` (not `RuleEval.Core`).
 
 ## Typical installation scenarios
 
@@ -56,21 +68,7 @@ services.AddRuleEvalDatabase<PostgreSqlRuleSetSource>();
 // Also register your NpgsqlDataSource / connection string separately
 ```
 
-### Scenario 4 – Custom cache (e.g. IDistributedCache wrapper)
-
-```xml
-<PackageReference Include="RuleEval" Version="0.1.0" />
-<PackageReference Include="RuleEval.Caching" Version="0.1.0" />
-<PackageReference Include="RuleEval.DependencyInjection" Version="0.1.0" />
-```
-
-```csharp
-services.AddRuleEval();
-// Override the default no-op cache:
-services.AddSingleton<IRuleSetCache, MyDistributedRuleSetCache>();
-```
-
-### Scenario 5 – Library that integrates with RuleEval (no runtime dependency)
+### Scenario 4 – Library that integrates with RuleEval (no runtime dependency)
 
 ```xml
 <PackageReference Include="RuleEval.Abstractions" Version="0.1.0" />
@@ -78,28 +76,16 @@ services.AddSingleton<IRuleSetCache, MyDistributedRuleSetCache>();
 
 Use only `RuleEval.Abstractions` to avoid pulling in the full evaluation engine.
 
-### Scenario 6 – Diagnostics / metrics hooks
-
-```xml
-<PackageReference Include="RuleEval" Version="0.1.0" />
-<PackageReference Include="RuleEval.Diagnostics" Version="0.1.0" />
-```
-
-Implement `IRuleEvaluationObserver` and wire it to your metrics pipeline.
-
-## Dependency graph
+## Dependency graph (public packages)
 
 ```
-RuleEval.Abstractions           (no dependencies)
-RuleEval                        → RuleEval.Abstractions
-RuleEval.Caching                → RuleEval.Abstractions
-RuleEval.Diagnostics            → RuleEval.Abstractions
-RuleEval.Database.Abstractions  → RuleEval.Abstractions
-RuleEval.Database               → RuleEval + RuleEval.Caching + RuleEval.Database.Abstractions
-                                  (+ Npgsql for PostgreSqlRuleSetSource;
-                                   SqlServerRuleSetSource uses System.Data.Common — no extra dep)
-RuleEval.DependencyInjection    → RuleEval + RuleEval.Caching + Microsoft.Extensions.DependencyInjection.Abstractions
-RuleEval.Database.DependencyInjection → RuleEval.DependencyInjection + RuleEval.Database
+RuleEval.Abstractions                   (no dependencies)
+RuleEval                                → RuleEval.Abstractions
+RuleEval.DependencyInjection            → RuleEval + Microsoft.Extensions.DependencyInjection.Abstractions
+                                          (caching bundled internally from RuleEval.Caching project)
+RuleEval.Database                       → RuleEval + Npgsql
+                                          (caching and DB abstractions bundled internally)
+RuleEval.Database.DependencyInjection   → RuleEval.DependencyInjection + RuleEval.Database
 ```
 
 ## Publishing a new version
@@ -112,7 +98,7 @@ RuleEval.Database.DependencyInjection → RuleEval.DependencyInjection + RuleEva
    ```
 
 2. The [publish workflow](../.github/workflows/publish.yml) triggers automatically,
-   builds, tests, packs all packages and pushes them to NuGet.org using the
+   builds, tests, packs all public packages and pushes them to NuGet.org using the
    `NUGET_API_KEY` repository secret.
 
 3. To publish manually, trigger the `publish` workflow via GitHub Actions
@@ -135,4 +121,4 @@ concrete providers:
 | `SqlServerRuleSetSource` | SQL Server via `System.Data.Common.DbConnection` (no extra NuGet dependency) |
 
 Additional providers (SQLite, Oracle, …) can be added by implementing
-`IRuleSetSource` from `RuleEval.Database.Abstractions`.
+`IRuleSetSource` from the `RuleEval.Database.Abstractions` internal project.

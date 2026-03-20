@@ -4,36 +4,41 @@
 
 ## Přehled vrstev
 
-RuleEval je vrstevnatý rule engine. Každá vrstva je samostatný NuGet balíček — vyšší vrstvy závisí na nižších, nikdy naopak. Závislosti tečou striktně jedním směrem.
+RuleEval je vrstevnatý rule engine. Každá vrstva je samostatný projekt — vyšší vrstvy závisí na nižších, nikdy naopak. Závislosti tečou striktně jedním směrem.
+
+Veřejné NuGet balíčky jsou označeny **tučně**. Ostatní jsou interní projekty zabalené do příslušných veřejných balíčků.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  RuleEval.Database.DependencyInjection                       │
-│  RuleEval.DependencyInjection                                │  ← DI integrace (volitelné)
+│  RuleEval.Database.DependencyInjection  [veřejný NuGet]      │
+│  RuleEval.DependencyInjection           [veřejný NuGet]      │  ← DI integrace (volitelné)
 ├──────────────────────────────────────────────────────────────┤
-│  RuleEval.Database                                           │  ← DB adaptér (PostgreSQL, SQL Server)
-│  RuleEval.Database.Abstractions                              │
+│  RuleEval.Database                      [veřejný NuGet]      │  ← DB adaptér (PostgreSQL, SQL Server)
+│  RuleEval.Database.Abstractions         [interní projekt]    │
 ├──────────────────────────────────────────────────────────────┤
-│  RuleEval.Diagnostics           RuleEval.Caching             │  ← volitelné doplňky
+│  RuleEval.Diagnostics  [interní]  RuleEval.Caching [interní] │  ← interní doplňky
 ├──────────────────────────────────────────────────────────────┤
-│  RuleEval  (RuleEval.Core)                                   │  ← evaluační engine + matchery
+│  RuleEval  (projekt: RuleEval.Core)     [veřejný NuGet]      │  ← evaluační engine + matchery
 ├──────────────────────────────────────────────────────────────┤
-│  RuleEval.Abstractions                                       │  ← contracts, doménový model
+│  RuleEval.Abstractions                  [veřejný NuGet]      │  ← contracts, doménový model
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## Závislosti mezi balíčky
+## Veřejné NuGet balíčky vs. interní projekty
 
-| Balíček (NuGet ID) | Závisí na |
-|---|---|
-| `RuleEval.Abstractions` | — |
-| `RuleEval` | `RuleEval.Abstractions` |
-| `RuleEval.Caching` | `RuleEval.Abstractions` |
-| `RuleEval.Diagnostics` | `RuleEval.Abstractions` |
-| `RuleEval.DependencyInjection` | `RuleEval`, `RuleEval.Caching` |
-| `RuleEval.Database.Abstractions` | `RuleEval.Abstractions` |
-| `RuleEval.Database` | `RuleEval`, `RuleEval.Caching`, `RuleEval.Database.Abstractions` |
-| `RuleEval.Database.DependencyInjection` | `RuleEval.DependencyInjection`, `RuleEval.Database` |
+| Projekt | NuGet ID | Typ |
+|---|---|---|
+| `RuleEval.Abstractions` | `RuleEval.Abstractions` | veřejný NuGet balíček |
+| `RuleEval.Core` | `RuleEval` | veřejný NuGet balíček |
+| `RuleEval.DependencyInjection` | `RuleEval.DependencyInjection` | veřejný NuGet balíček |
+| `RuleEval.Database` | `RuleEval.Database` | veřejný NuGet balíček |
+| `RuleEval.Database.DependencyInjection` | `RuleEval.Database.DependencyInjection` | veřejný NuGet balíček |
+| `RuleEval.Caching` | — | interní projekt (není publikován) |
+| `RuleEval.Diagnostics` | — | interní projekt (není publikován) |
+| `RuleEval.Database.Abstractions` | — | interní projekt (není publikován) |
+
+> `RuleEval.Core` je název interního projektu; veřejný NuGet balíček se jmenuje `RuleEval`.
+> Interní projekty jsou zahrnuty do příslušných veřejných balíčků přes project reference.
 
 ## Doménový model (`RuleEval.Abstractions`)
 
@@ -130,7 +135,7 @@ var registry = MatcherRegistry.CreateDefault().WithMatcher(new PrefixMatcher());
 var evaluator = new RuleSetEvaluator(registry);
 ```
 
-## Cache (`RuleEval.Caching`)
+## Cache (interní projekt `RuleEval.Caching`)
 
 ```csharp
 public interface IRuleSetCache

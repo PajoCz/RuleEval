@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- Internal project only — not published as a standalone NuGet package.
+         Functionality is consumed by RuleEval.DependencyInjection and RuleEval.Database via project references. -->
+    <IsPackable>false</IsPackable>
     <Description>Optional cache abstractions (IRuleSetCache) and in-memory implementation for RuleEval rule sets.</Description>
-    <PackageId>RuleEval.Caching</PackageId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
