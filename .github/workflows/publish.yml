@@ -1,0 +1,65 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 0.1.0)'
+        required: true
+
+jobs:
+  build-pack-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for SourceLink
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Strip leading 'v' from tag name (e.g. v0.1.0 -> 0.1.0)
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: $VERSION"
+
+      - name: Restore
+        run: dotnet restore RuleEval.sln
+
+      - name: Build
+        run: dotnet build RuleEval.sln -c Release --no-restore /p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Test
+        run: dotnet test tests/RuleEval.Tests.Unit/RuleEval.Tests.Unit.csproj -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack RuleEval.sln -c Release --no-build -o artifacts/nupkgs /p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Upload packages as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages-${{ steps.version.outputs.VERSION }}
+          path: artifacts/nupkgs/
+
+      - name: Publish to NuGet.org
+        run: |
+          dotnet nuget push artifacts/nupkgs/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

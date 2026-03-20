@@ -1,28 +1,22 @@
 using Microsoft.Extensions.DependencyInjection;
 using RuleEval.Caching;
 using RuleEval.Core;
-using RuleEval.Database;
-using RuleEval.Database.Abstractions;
 
 namespace RuleEval.DependencyInjection;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddRuleEvalCore(this IServiceCollection services)
+    /// <summary>
+    /// Registers the core RuleEval services: <see cref="MatcherRegistry"/>, <see cref="RuleSetEvaluator"/>,
+    /// and a no-op <see cref="IRuleSetCache"/>. Does not register any database-related services.
+    /// For database integration use <c>AddRuleEvalDatabase</c> from the
+    /// <c>RuleEval.Database.DependencyInjection</c> package.
+    /// </summary>
+    public static IServiceCollection AddRuleEval(this IServiceCollection services)
     {
         services.AddSingleton(MatcherRegistry.CreateDefault());
         services.AddSingleton<RuleSetEvaluator>();
-        services.AddSingleton<DbRuleSetMapper>();
         services.AddSingleton<IRuleSetCache, NoCacheRuleSetCache>();
-        return services;
-    }
-
-    public static IServiceCollection AddRuleEvalRepository<TSource>(this IServiceCollection services)
-        where TSource : class, IRuleSetSource
-    {
-        services.AddRuleEvalCore();
-        services.AddSingleton<IRuleSetRepository, RuleSetRepository>();
-        services.AddSingleton<IRuleSetSource, TSource>();
         return services;
     }
 }

@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Evaluation engine and built-in matchers for RuleEval.</Description>
-    <PackageId>RuleEval.Core</PackageId>
+    <!-- Main runtime package - consumers install this for the evaluation engine and built-in matchers -->
+    <Description>Rule evaluation engine and built-in matchers for .NET. Core runtime package of RuleEval.</Description>
+    <PackageId>RuleEval</PackageId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />

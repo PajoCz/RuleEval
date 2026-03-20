@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>preview</LangVersion>
+    <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
@@ -11,11 +11,20 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
-    <RepositoryUrl>https://github.com/example/RuleEval</RepositoryUrl>
+    <!-- NuGet package metadata -->
+    <RepositoryUrl>https://github.com/PajoCz/RuleEval</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/PajoCz/RuleEval</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Authors>OpenAI</Authors>
-    <Company>OpenAI</Company>
+    <Authors>PajoCz</Authors>
+    <Company>PajoCz</Company>
+    <PackageTags>rules;rule-engine;rule-evaluation;business-rules;decision-table</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Version>0.1.0</Version>
+    <!-- Symbol packages for debugging support -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <RootNamespace>$(MSBuildProjectName)</RootNamespace>
   </PropertyGroup>
 
@@ -26,4 +35,10 @@
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'RuleEval.Tests.Unit' or '$(MSBuildProjectName)' == 'RuleEval.Tests.Integration'">
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+
+  <!-- Include root README.md in every NuGet package -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
+  </ItemGroup>
 </Project>
