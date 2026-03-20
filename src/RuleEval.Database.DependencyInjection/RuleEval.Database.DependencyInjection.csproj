@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Microsoft.Extensions.DependencyInjection integration for RuleEval database-backed rule loading. Registers DbRuleSetMapper, RuleSetRepository, and IRuleSetSource implementations.</Description>
+    <PackageId>RuleEval.Database.DependencyInjection</PackageId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RuleEval.DependencyInjection/RuleEval.DependencyInjection.csproj" />
+    <ProjectReference Include="../RuleEval.Database/RuleEval.Database.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

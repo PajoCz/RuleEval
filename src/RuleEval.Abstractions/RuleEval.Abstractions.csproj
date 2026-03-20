@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Public contracts and immutable domain model for RuleEval.</Description>
+    <Description>Public contracts and immutable domain model for RuleEval. Reference this package when writing libraries that integrate with RuleEval without taking a runtime dependency.</Description>
     <PackageId>RuleEval.Abstractions</PackageId>
   </PropertyGroup>
 </Project>

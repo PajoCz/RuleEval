@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Optional diagnostics hooks and observers for RuleEval.</Description>
+    <Description>Optional diagnostics hooks and observer pattern for RuleEval evaluation results (IRuleEvaluationObserver).</Description>
     <PackageId>RuleEval.Diagnostics</PackageId>
   </PropertyGroup>
   <ItemGroup>

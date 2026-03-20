@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Database-backed rule set loading and mapping for RuleEval.</Description>
+    <!-- NOTE: RuleEval.Database currently bundles Npgsql (PostgreSQL) as its only provider.
+         When SQL Server or other providers are added, consider splitting into
+         RuleEval.Database.PostgreSql and RuleEval.Database.SqlServer. -->
+    <Description>Database-backed rule set loading for RuleEval. Includes DbRuleSetMapper, RuleSetRepository, and a PostgreSQL source (PostgreSqlRuleSetSource) via Npgsql. SQL Server support (SqlServerRuleSetSource) is provider-neutral and works with any ADO.NET DbConnection.</Description>
     <PackageId>RuleEval.Database</PackageId>
   </PropertyGroup>
   <ItemGroup>

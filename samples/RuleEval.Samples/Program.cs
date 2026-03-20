@@ -30,7 +30,7 @@ Console.WriteLine($"First output: {result.Match?.Outputs[0].RawValue}");
 Console.WriteLine($"Trace captured: {result.Trace is not null}");
 
 var services = new ServiceCollection();
-services.AddRuleEvalCore();
+services.AddRuleEval();
 var provider = services.BuildServiceProvider();
 var resolvedEvaluator = provider.GetRequiredService<RuleSetEvaluator>();
 Console.WriteLine($"DI evaluator ready: {resolvedEvaluator is not null}");

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Optional cache abstractions and implementations for RuleEval rule sets.</Description>
+    <Description>Optional cache abstractions (IRuleSetCache) and in-memory implementation for RuleEval rule sets.</Description>
     <PackageId>RuleEval.Caching</PackageId>
   </PropertyGroup>
   <ItemGroup>

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Database repository and source abstractions for RuleEval.</Description>
+    <Description>Database source and repository contracts for RuleEval (IRuleSetSource, IRuleSetRepository, DbRuleSetDefinition). Provider-neutral layer for loading rule sets from a database.</Description>
     <PackageId>RuleEval.Database.Abstractions</PackageId>
   </PropertyGroup>
   <ItemGroup>
