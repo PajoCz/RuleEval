@@ -232,7 +232,8 @@ public sealed class SqlServerRuleSetSource : IRuleSetSource
         var parameters = new Dictionary<string, object?> { ["@Code"] = key };
         var columnRows = await _executor.QueryAsync(_connectionString, _columnsStoredProcedure, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
         var dataRows = await _executor.QueryAsync(_connectionString, _rowsStoredProcedure, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
-        return new DbRuleSetDefinition(key, RelationalSourceMapping.MapColumns(columnRows), dataRows.Select(static row => new RuleSetRowData(row.ToDictionary())).ToArray());
+        var columns = RelationalSourceMapping.MapColumns(columnRows);
+        return new DbRuleSetDefinition(key, columns, RelationalSourceMapping.MapRows(dataRows, columns));
     }
 
 }
@@ -241,13 +242,34 @@ internal static class RelationalSourceMapping
 {
     public static IReadOnlyList<RuleSetColumnDefinition> MapColumns(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
         => rows.Select(static row => new RuleSetColumnDefinition(
-            Convert.ToString(row["ColumnName"]) ?? throw new InvalidOperationException("Missing ColumnName."),
-            Convert.ToInt32(row["ColumnOrder"]),
-            Enum.Parse<RuleFieldRole>(Convert.ToString(row["Role"]) ?? throw new InvalidOperationException("Missing Role."), true),
+            Convert.ToString(row["Name"]) ?? throw new InvalidOperationException("Missing Name."),
+            Convert.ToInt32(row["Order"]),
+            MapRole(Convert.ToInt32(row["Type"])),
             Convert.ToString(row.TryGetValue("FieldName", out var fieldName) ? fieldName : null),
-            Convert.ToString(row.TryGetValue("MatcherKey", out var matcherKey) ? matcherKey : null)))
+            Convert.ToString(row.TryGetValue("MatcherKey", out var matcherKey) ? matcherKey : null),
+            Convert.ToInt32(row["ColNr"])))
             .OrderBy(static column => column.ColumnOrder)
             .ToArray();
+
+    public static IReadOnlyList<RuleSetRowData> MapRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, IReadOnlyList<RuleSetColumnDefinition> columns)
+        => rows.Select(row =>
+        {
+            var mapped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var column in columns)
+            {
+                var colKey = $"Col{(column.SourceColumnNumber ?? column.ColumnOrder):D2}";
+                mapped[column.ColumnName] = row.TryGetValue(colKey, out var value) ? value : null;
+            }
+            return new RuleSetRowData(mapped);
+        }).ToArray();
+
+    private static RuleFieldRole MapRole(int type) => type switch
+    {
+        1 => RuleFieldRole.Input,
+        2 => RuleFieldRole.Output,
+        3 => RuleFieldRole.PrimaryKey,
+        _ => throw new InvalidOperationException($"Unknown column type '{type}'.")
+    };
 }
 
 public sealed class PostgreSqlRuleSetSource : IRuleSetSource
@@ -270,6 +292,7 @@ public sealed class PostgreSqlRuleSetSource : IRuleSetSource
         var parameters = new Dictionary<string, object?> { ["@code"] = key };
         var columnRows = await _executor.QueryAsync(_connectionString, $"select * from {_columnsFunction}(@code)", parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
         var dataRows = await _executor.QueryAsync(_connectionString, $"select * from {_rowsFunction}(@code)", parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
-        return new DbRuleSetDefinition(key, RelationalSourceMapping.MapColumns(columnRows), dataRows.Select(static row => new RuleSetRowData(row.ToDictionary())).ToArray());
+        var columns = RelationalSourceMapping.MapColumns(columnRows);
+        return new DbRuleSetDefinition(key, columns, RelationalSourceMapping.MapRows(dataRows, columns));
     }
 }

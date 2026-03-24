@@ -14,6 +14,8 @@ Moderní open-source rule engine pro **.NET 8**
 ## Obsah
 
 - [Rychlý start](#rychlý-start)
+- [EvaluationContext — pozičně nebo dle názvů](#evaluationcontext--pozičně-nebo-dle-názvů)
+- [Vyhodnocení z databáze](#vyhodnocení-z-databáze)
 - [NuGet balíčky](#nuget-balíčky)
 - [Dokumentace](#dokumentace)
 - [Build a test](#build-a-test)
@@ -57,6 +59,87 @@ using Microsoft.Extensions.DependencyInjection;
 using RuleEval.DependencyInjection;
 
 services.AddRuleEval();
+```
+
+## EvaluationContext — pozičně nebo dle názvů
+
+Vstupní hodnoty lze předat dvěma způsoby. Pořadí pozičních hodnot odpovídá sloupci `Order` definice pravidel.
+
+```csharp
+// Pozičně — hodnoty ve stejném pořadí jako vstupní pole v RuleSet
+var result = evaluator.EvaluateFirst(
+    ruleSet,
+    EvaluationContext.FromPositional("7BN Perspektiva Důchod", 15m));
+
+// Dle názvů — nezávislé na pořadí
+var result = evaluator.EvaluateFirst(
+    ruleSet,
+    EvaluationContext.FromNamed(new Dictionary<string, object?>
+    {
+        ["segment"] = "7BN Perspektiva Důchod",
+        ["age"]     = 15m,
+    }));
+
+Console.WriteLine(result.Status);                        // Matched
+Console.WriteLine(result.Match?.Outputs[0].RawValue);    // C2/240
+```
+
+## Vyhodnocení z databáze
+
+```bash
+dotnet add package RuleEval.Database
+dotnet add package RuleEval.Database.DependencyInjection
+```
+
+DB schéma vrací sloupce (`Name`, `ColNr`, `Order`, `Type`) a data (`Col01`, `Col02`, …).
+`ColNr` určuje fyzický sloupec v datové tabulce, `Order` určuje pořadí pro poziční vyhodnocení.
+
+### SQL Server
+
+```csharp
+using RuleEval.Database;
+using RuleEval.Database.DependencyInjection;
+
+// Registrace
+services.AddRuleEvalDatabase(connectionString: "...",
+    columnsStoredProcedure: "[Rule].p_GetSchemaColBySchemaCode",
+    rowsStoredProcedure:    "[Rule].p_GetTranslatorDataBySchemaCode");
+
+// Vyhodnocení
+var repository = serviceProvider.GetRequiredService<IRuleSetRepository>();
+
+// Pozičně — pořadí dle sloupce Order v DB
+var result = await repository.EvaluateFirstAsync(
+    "Rule1Schema1",
+    EvaluationContext.FromPositional("EE.*hodnota", "Ahoj.*hodnota"));
+
+// Dle názvů — Name sloupce z DB schématu
+var result = await repository.EvaluateFirstAsync(
+    "Rule1Schema1",
+    EvaluationContext.FromNamed(new Dictionary<string, object?>
+    {
+        ["Input1 Obor"] = "EE.*hodnota",
+        ["Input2"]      = "Ahoj.*hodnota",
+    }));
+
+Console.WriteLine(result.Status);                        // Matched
+Console.WriteLine(result.Match?.Outputs[0].RawValue);    // Vystup1
+```
+
+### Zkratky na `RuleSetRepository`
+
+```csharp
+// Výsledek evaluace
+EvaluationResult result = await repository.EvaluateFirstAsync(key, context);
+
+// Hodí výjimku při NoMatch / AmbiguousMatch / InvalidInput
+EvaluationResult result = await repository.EvaluateFirstOrThrowAsync(key, context);
+
+// Přímo hodnota konkrétního výstupního pole, nebo null
+string? value = await repository.GetFirstOutputAsync(key, context, outputName: "Vystup x");
+
+// Hodí výjimku, pokud výstup chybí
+string value  = await repository.GetFirstOutputOrThrowAsync(key, context, outputName: "Vystup x");
 ```
 
 ## NuGet balíčky

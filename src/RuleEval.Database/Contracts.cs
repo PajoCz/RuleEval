@@ -7,7 +7,8 @@ public sealed record RuleSetColumnDefinition(
     int ColumnOrder,
     RuleFieldRole Role,
     string? FieldName = null,
-    string? MatcherKey = null);
+    string? MatcherKey = null,
+    int? SourceColumnNumber = null);
 
 public sealed record RuleSetRowData(IReadOnlyDictionary<string, object?> Values);
 
