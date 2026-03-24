@@ -75,23 +75,29 @@ public sealed class RuleSetRepository : IRuleSetRepository
     private readonly DbRuleSetMapper _mapper;
     private readonly RuleSetEvaluator _evaluator;
     private readonly string _cacheNamespace;
+    private readonly TimeSpan _defaultCacheTtl;
 
     public RuleSetRepository(
         IRuleSetSource source,
         IRuleSetCache? cache = null,
         DbRuleSetMapper? mapper = null,
         RuleSetEvaluator? evaluator = null,
-        string cacheNamespace = "rulesets")
+        string cacheNamespace = "rulesets",
+        TimeSpan defaultCacheTtl = default)
     {
         _source = source;
         _cache = cache ?? new NoCacheRuleSetCache();
         _mapper = mapper ?? new DbRuleSetMapper();
         _evaluator = evaluator ?? new RuleSetEvaluator();
         _cacheNamespace = cacheNamespace;
+        _defaultCacheTtl = defaultCacheTtl;
     }
 
     public ValueTask<RuleSet> LoadAsync(string key, CancellationToken cancellationToken = default)
-        => LoadAsync(key, TimeSpan.Zero, cancellationToken);
+        => LoadAsync(key, _defaultCacheTtl, cancellationToken);
+
+    public ValueTask InvalidateCacheAsync(string key, CancellationToken cancellationToken = default)
+        => _cache.RemoveAsync(new RuleSetCacheKey(_cacheNamespace, key), cancellationToken);
 
     public async ValueTask<RuleSet> LoadAsync(string key, TimeSpan cacheTtl, CancellationToken cancellationToken = default)
     {
@@ -157,6 +163,23 @@ public sealed class RuleSetRepository : IRuleSetRepository
     {
         var value = await GetFirstOutputAsync(key, context, outputName, options, cancellationToken).ConfigureAwait(false);
         return value ?? throw new InvalidOperationException($"Output '{outputName}' was not found for rule set '{key}'.");
+    }
+
+    public async ValueTask<string?> GetFirstOutputAsync(string key, EvaluationContext context, EvaluationOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var result = await EvaluateFirstAsync(key, context, options, cancellationToken).ConfigureAwait(false);
+        if (result.Status != EvaluationStatus.Matched || result.Match is null)
+        {
+            return null;
+        }
+
+        return result.Match.Outputs.FirstOrDefault()?.RawValue?.ToString();
+    }
+
+    public async ValueTask<string> GetFirstOutputOrThrowAsync(string key, EvaluationContext context, EvaluationOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var value = await GetFirstOutputAsync(key, context, options, cancellationToken).ConfigureAwait(false);
+        return value ?? throw new InvalidOperationException($"Rule set '{key}' returned no output.");
     }
 }
 

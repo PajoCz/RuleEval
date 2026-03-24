@@ -94,52 +94,77 @@ dotnet add package RuleEval.Database.DependencyInjection
 DB schéma vrací sloupce (`Name`, `ColNr`, `Order`, `Type`) a data (`Col01`, `Col02`, …).
 `ColNr` určuje fyzický sloupec v datové tabulce, `Order` určuje pořadí pro poziční vyhodnocení.
 
-### SQL Server
+### Inicializace v `Program.cs`
 
 ```csharp
+using Microsoft.Data.SqlClient;
 using RuleEval.Database;
 using RuleEval.Database.DependencyInjection;
 
-// Registrace
-services.AddRuleEvalDatabase(connectionString: "...",
-    columnsStoredProcedure: "[Rule].p_GetSchemaColBySchemaCode",
-    rowsStoredProcedure:    "[Rule].p_GetTranslatorDataBySchemaCode");
-
-// Vyhodnocení
-var repository = serviceProvider.GetRequiredService<IRuleSetRepository>();
-
-// Pozičně — pořadí dle sloupce Order v DB
-var result = await repository.EvaluateFirstAsync(
-    "Rule1Schema1",
-    EvaluationContext.FromPositional("EE.*hodnota", "Ahoj.*hodnota"));
-
-// Dle názvů — Name sloupce z DB schématu
-var result = await repository.EvaluateFirstAsync(
-    "Rule1Schema1",
-    EvaluationContext.FromNamed(new Dictionary<string, object?>
-    {
-        ["Input1 Obor"] = "EE.*hodnota",
-        ["Input2"]      = "Ahoj.*hodnota",
-    }));
-
-Console.WriteLine(result.Status);                        // Matched
-Console.WriteLine(result.Match?.Outputs[0].RawValue);    // Vystup1
+builder.Services.AddRuleEvalDatabase(
+    sp => new SqlServerRuleSetSource(
+        new AdoCommandExecutor(cs => new SqlConnection(cs)),
+        builder.Configuration.GetConnectionString("RuleEval")!,
+        "[dbo].[p_GetSchemaColBySchemaCode]",
+        "[dbo].[p_GetDataBySchemaCode]"),
+    opt => opt.DefaultCacheTtl = TimeSpan.FromMinutes(30));
 ```
 
-### Zkratky na `RuleSetRepository`
+Výsledkem je, že `IRuleSetRepository` je singleton s 30minutovou cache. Každé volání `LoadAsync` / `EvaluateFirstAsync` / `GetFirstOutputAsync` automaticky čte z cache; do DB se jde jen při prvním načtení nebo po invalidaci.
+
+### Použití v business kódu
+
+Do třídy stačí injektovat jen `IRuleSetRepository` — o připojení k DB, cache i TTL se stará DI konfigurace z `Program.cs`.
 
 ```csharp
+public class PricingService(IRuleSetRepository rules)
+{
+    // Vrátí hodnotu prvního výstupního sloupce — název sloupce nás nezajímá
+    public Task<string?> GetFormulaAsync(string segment, decimal age) =>
+        rules.GetFirstOutputAsync("Pricing",
+            EvaluationContext.FromPositional(segment, age));
+
+    // Vrátí hodnotu konkrétního výstupního sloupce dle názvu
+    public Task<string?> GetFormulaByNameAsync(string segment, decimal age) =>
+        rules.GetFirstOutputAsync("Pricing",
+            EvaluationContext.FromPositional(segment, age),
+            outputName: "Formula");
+}
+```
+
+### Invalidace cache
+
+```csharp
+// Vyhodí konkrétní pravidlo z cache — příští volání načte z DB a uloží znovu
+await repository.InvalidateCacheAsync("Pricing");
+```
+
+### Přehled metod `IRuleSetRepository`
+
+```csharp
+// Načte RuleSet (z cache nebo DB)
+RuleSet ruleSet = await repository.LoadAsync(key);
+
 // Výsledek evaluace
 EvaluationResult result = await repository.EvaluateFirstAsync(key, context);
 
 // Hodí výjimku při NoMatch / AmbiguousMatch / InvalidInput
 EvaluationResult result = await repository.EvaluateFirstOrThrowAsync(key, context);
 
-// Přímo hodnota konkrétního výstupního pole, nebo null
-string? value = await repository.GetFirstOutputAsync(key, context, outputName: "Vystup x");
+// Hodnota prvního výstupního sloupce (název nás nezajímá), nebo null
+string? value = await repository.GetFirstOutputAsync(key, context);
 
-// Hodí výjimku, pokud výstup chybí
-string value  = await repository.GetFirstOutputOrThrowAsync(key, context, outputName: "Vystup x");
+// Totéž, hodí výjimku pokud pravidlo neodpovídá nebo nemá výstupy
+string value = await repository.GetFirstOutputOrThrowAsync(key, context);
+
+// Hodnota konkrétního výstupního sloupce dle názvu, nebo null
+string? value = await repository.GetFirstOutputAsync(key, context, outputName: "Formula");
+
+// Totéž, hodí výjimku pokud výstup chybí
+string value = await repository.GetFirstOutputOrThrowAsync(key, context, outputName: "Formula");
+
+// Invalidace cache pro konkrétní pravidlo
+await repository.InvalidateCacheAsync(key);
 ```
 
 ## NuGet balíčky

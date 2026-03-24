@@ -27,8 +27,11 @@ public interface IRuleSetRepository
 {
     ValueTask<RuleSet> LoadAsync(string key, CancellationToken cancellationToken = default);
     ValueTask<RuleSet> LoadAsync(string key, TimeSpan cacheTtl, CancellationToken cancellationToken = default);
+    ValueTask InvalidateCacheAsync(string key, CancellationToken cancellationToken = default);
     ValueTask<EvaluationResult> EvaluateFirstAsync(string key, EvaluationContext context, EvaluationOptions? options = null, CancellationToken cancellationToken = default);
     ValueTask<EvaluationResult> EvaluateFirstOrThrowAsync(string key, EvaluationContext context, EvaluationOptions? options = null, CancellationToken cancellationToken = default);
     ValueTask<string?> GetFirstOutputAsync(string key, EvaluationContext context, string outputName, EvaluationOptions? options = null, CancellationToken cancellationToken = default);
     ValueTask<string> GetFirstOutputOrThrowAsync(string key, EvaluationContext context, string outputName, EvaluationOptions? options = null, CancellationToken cancellationToken = default);
+    ValueTask<string?> GetFirstOutputAsync(string key, EvaluationContext context, EvaluationOptions? options = null, CancellationToken cancellationToken = default);
+    ValueTask<string> GetFirstOutputOrThrowAsync(string key, EvaluationContext context, EvaluationOptions? options = null, CancellationToken cancellationToken = default);
 }
