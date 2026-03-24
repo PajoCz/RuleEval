@@ -24,7 +24,7 @@ in the public packages above via project references.
 | Internal project | Functionality bundled into |
 |---|---|
 | `RuleEval.Caching` | `RuleEval.DependencyInjection`, `RuleEval.Database` |
-| `RuleEval.Diagnostics` | Available via `RuleEval` / consumed internally |
+| `RuleEval.Diagnostics` | `RuleEval` (bundled via project reference) |
 | `RuleEval.Database.Abstractions` | `RuleEval.Database` |
 
 > **Note:** `RuleEval.Core` is the internal project name for the main evaluation engine.
@@ -81,6 +81,7 @@ Use only `RuleEval.Abstractions` to avoid pulling in the full evaluation engine.
 ```
 RuleEval.Abstractions                   (no dependencies)
 RuleEval                                → RuleEval.Abstractions
+                                          (diagnostics observer types bundled internally from RuleEval.Diagnostics project)
 RuleEval.DependencyInjection            → RuleEval + Microsoft.Extensions.DependencyInjection.Abstractions
                                           (caching bundled internally from RuleEval.Caching project)
 RuleEval.Database                       → RuleEval + Npgsql
