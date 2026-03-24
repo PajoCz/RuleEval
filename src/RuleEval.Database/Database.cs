@@ -229,7 +229,7 @@ public sealed class SqlServerRuleSetSource : IRuleSetSource
 
     public async ValueTask<DbRuleSetDefinition> LoadAsync(string key, CancellationToken cancellationToken = default)
     {
-        var parameters = new Dictionary<string, object?> { ["@Key"] = key };
+        var parameters = new Dictionary<string, object?> { ["@Code"] = key };
         var columnRows = await _executor.QueryAsync(_connectionString, _columnsStoredProcedure, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
         var dataRows = await _executor.QueryAsync(_connectionString, _rowsStoredProcedure, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
         return new DbRuleSetDefinition(key, RelationalSourceMapping.MapColumns(columnRows), dataRows.Select(static row => new RuleSetRowData(row.ToDictionary())).ToArray());
@@ -267,9 +267,9 @@ public sealed class PostgreSqlRuleSetSource : IRuleSetSource
 
     public async ValueTask<DbRuleSetDefinition> LoadAsync(string key, CancellationToken cancellationToken = default)
     {
-        var parameters = new Dictionary<string, object?> { ["@key"] = key };
-        var columnRows = await _executor.QueryAsync(_connectionString, $"select * from {_columnsFunction}(@key)", parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
-        var dataRows = await _executor.QueryAsync(_connectionString, $"select * from {_rowsFunction}(@key)", parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
+        var parameters = new Dictionary<string, object?> { ["@code"] = key };
+        var columnRows = await _executor.QueryAsync(_connectionString, $"select * from {_columnsFunction}(@code)", parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
+        var dataRows = await _executor.QueryAsync(_connectionString, $"select * from {_rowsFunction}(@code)", parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
         return new DbRuleSetDefinition(key, RelationalSourceMapping.MapColumns(columnRows), dataRows.Select(static row => new RuleSetRowData(row.ToDictionary())).ToArray());
     }
 }
