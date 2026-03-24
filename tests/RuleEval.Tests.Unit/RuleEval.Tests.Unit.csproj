@@ -4,8 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/RuleEval.Core/RuleEval.Core.csproj" />
-    <ProjectReference Include="../../src/RuleEval.Caching/RuleEval.Caching.csproj" />
-    <ProjectReference Include="../../src/RuleEval.Diagnostics/RuleEval.Diagnostics.csproj" />
     <ProjectReference Include="../../src/RuleEval.Database/RuleEval.Database.csproj" />
   </ItemGroup>
   <ItemGroup>
