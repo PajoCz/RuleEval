@@ -121,32 +121,36 @@ public sealed class RuleEvalIntegrationTests
                 [
                     new Dictionary<string, object?>
                     {
-                        ["ColumnName"] = "segment",
-                        ["ColumnOrder"] = 0,
-                        ["Role"] = "Input",
+                        ["Name"] = "segment",
+                        ["ColNr"] = 1,
+                        ["Order"] = 1,
+                        ["Type"] = 1,
                         ["FieldName"] = "segment",
                         ["MatcherKey"] = DefaultMatcherKeys.Regex,
                     },
                     new Dictionary<string, object?>
                     {
-                        ["ColumnName"] = "age",
-                        ["ColumnOrder"] = 1,
-                        ["Role"] = "Input",
+                        ["Name"] = "age",
+                        ["ColNr"] = 2,
+                        ["Order"] = 2,
+                        ["Type"] = 1,
                         ["FieldName"] = "age",
                         ["MatcherKey"] = DefaultMatcherKeys.DecimalInterval,
                     },
                     new Dictionary<string, object?>
                     {
-                        ["ColumnName"] = "formula",
-                        ["ColumnOrder"] = 2,
-                        ["Role"] = "Output",
+                        ["Name"] = "formula",
+                        ["ColNr"] = 3,
+                        ["Order"] = 3,
+                        ["Type"] = 2,
                         ["FieldName"] = "formula",
                     },
                     new Dictionary<string, object?>
                     {
-                        ["ColumnName"] = "id",
-                        ["ColumnOrder"] = 3,
-                        ["Role"] = "PrimaryKey",
+                        ["Name"] = "id",
+                        ["ColNr"] = 4,
+                        ["Order"] = 4,
+                        ["Type"] = 3,
                         ["FieldName"] = "id",
                     },
                 ]);
@@ -156,10 +160,10 @@ public sealed class RuleEvalIntegrationTests
             [
                 new Dictionary<string, object?>
                 {
-                    ["segment"] = ".*Perspektiva.*",
-                    ["age"] = "INTERVAL<15;24>",
-                    ["formula"] = "C2/240",
-                    ["id"] = 1,
+                    ["Col01"] = ".*Perspektiva.*",
+                    ["Col02"] = "INTERVAL<15;24>",
+                    ["Col03"] = "C2/240",
+                    ["Col04"] = 1,
                 },
             ]);
         }
