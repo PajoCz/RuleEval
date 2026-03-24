@@ -15,20 +15,12 @@ their purpose, and the recommended ways to use them in an application.
 | `RuleEval.Database` | `DbRuleSetMapper`, `RuleSetRepository`, `PostgreSqlRuleSetSource`, `SqlServerRuleSetSource`. |
 | `RuleEval.Database.DependencyInjection` | `AddRuleEvalDatabase<TSource>()` extension. Registers mapper + repository + your source. |
 
-## Internal-only projects (not published to NuGet)
-
-The following projects exist in the solution for internal layering and maintainability,
-but are **not published as standalone NuGet packages**. Their functionality is included
-in the public packages above via project references.
-
-| Internal project | Functionality bundled into |
-|---|---|
-| `RuleEval.Caching` | `RuleEval.DependencyInjection`, `RuleEval.Database` |
-| `RuleEval.Diagnostics` | `RuleEval` (bundled via project reference) |
-| `RuleEval.Database.Abstractions` | `RuleEval.Database` |
-
 > **Note:** `RuleEval.Core` is the internal project name for the main evaluation engine.
 > The public NuGet package ID is `RuleEval` (not `RuleEval.Core`).
+> Caching (`IRuleSetCache`, `MemoryRuleSetCache`) and diagnostics observer types (`IRuleEvaluationObserver`)
+> are compiled directly into the `RuleEval` package (`src/RuleEval.Core`).
+> Database contracts (`IRuleSetSource`, `IRuleSetRepository`, `DbRuleSetDefinition`) are compiled directly
+> into the `RuleEval.Database` package (`src/RuleEval.Database`).
 
 ## Typical installation scenarios
 
@@ -81,11 +73,10 @@ Use only `RuleEval.Abstractions` to avoid pulling in the full evaluation engine.
 ```
 RuleEval.Abstractions                   (no dependencies)
 RuleEval                                → RuleEval.Abstractions
-                                          (diagnostics observer types bundled internally from RuleEval.Diagnostics project)
+                                          (caching + diagnostics observer types compiled in from src/RuleEval.Core)
 RuleEval.DependencyInjection            → RuleEval + Microsoft.Extensions.DependencyInjection.Abstractions
-                                          (caching bundled internally from RuleEval.Caching project)
 RuleEval.Database                       → RuleEval + Npgsql
-                                          (caching and DB abstractions bundled internally)
+                                          (DB contracts compiled in from src/RuleEval.Database)
 RuleEval.Database.DependencyInjection   → RuleEval.DependencyInjection + RuleEval.Database
 ```
 
@@ -122,4 +113,4 @@ concrete providers:
 | `SqlServerRuleSetSource` | SQL Server via `System.Data.Common.DbConnection` (no extra NuGet dependency) |
 
 Additional providers (SQLite, Oracle, …) can be added by implementing
-`IRuleSetSource` from the `RuleEval.Database.Abstractions` internal project.
+`IRuleSetSource` from the `RuleEval.Database` package.
