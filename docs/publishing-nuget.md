@@ -2,25 +2,17 @@
 
 # Publikování NuGet balíčků
 
-RuleEval se skládá z **5 veřejných NuGet balíčků** — všechny jsou pod `src/`. Projekty v `tests/`, `benchmarks/` a `samples/` se nepublikují. Interní projekty (`RuleEval.Caching`, `RuleEval.Diagnostics`, `RuleEval.Database.Abstractions`) nejsou publikovány jako samostatné balíčky.
+RuleEval se skládá z **5 veřejných NuGet balíčků** — všechny jsou pod `src/`. Projekty v `tests/`, `benchmarks/` a `samples/` se nepublikují.
 
 ## Veřejné balíčky
 
 | NuGet ID | Projekt |
 |---|---|
 | `RuleEval.Abstractions` | `src/RuleEval.Abstractions` |
-| `RuleEval` | `src/RuleEval.Core` |
+| `RuleEval` | `src/RuleEval.Core` (obsahuje také caching a diagnostics) |
 | `RuleEval.DependencyInjection` | `src/RuleEval.DependencyInjection` |
-| `RuleEval.Database` | `src/RuleEval.Database` |
+| `RuleEval.Database` | `src/RuleEval.Database` (obsahuje také DB contracts) |
 | `RuleEval.Database.DependencyInjection` | `src/RuleEval.Database.DependencyInjection` |
-
-## Interní projekty (nejsou publikovány)
-
-| Projekt | Zahrnut v |
-|---|---|
-| `src/RuleEval.Caching` | `RuleEval.DependencyInjection`, `RuleEval.Database` |
-| `src/RuleEval.Diagnostics` | `RuleEval` |
-| `src/RuleEval.Database.Abstractions` | `RuleEval.Database` |
 
 ## Sdílená metadata — `Directory.Build.props`
 
@@ -55,7 +47,7 @@ Verzi, autora a licence nastavte centrálně v `Directory.Build.props` v kořenu
 
 ```bash
 # Zabalit všechny veřejné balíčky do ./artifacts/
-dotnet pack RuleEval.sln -c Release --output ./artifacts
+dotnet pack RuleEval.slnx -c Release --output ./artifacts
 ```
 
 Nebo jednotlivě:
@@ -104,7 +96,7 @@ Doporučený postup:
 Verzi lze přepsat z příkazové řádky bez úpravy souborů:
 
 ```bash
-dotnet pack RuleEval.sln -c Release -p:VersionPrefix=1.2.0 --output ./artifacts
+dotnet pack RuleEval.slnx -c Release -p:VersionPrefix=1.2.0 --output ./artifacts
 ```
 
 ## GitHub Actions — automatické publikování
@@ -132,18 +124,18 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore RuleEval.sln
+        run: dotnet restore RuleEval.slnx
 
       - name: Build
-        run: dotnet build RuleEval.sln -c Release --no-restore
+        run: dotnet build RuleEval.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test RuleEval.sln -c Release --no-build
+        run: dotnet test RuleEval.slnx -c Release --no-build
 
       - name: Pack
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          dotnet pack RuleEval.sln -c Release --no-build \
+          dotnet pack RuleEval.slnx -c Release --no-build \
             -p:VersionPrefix="$VERSION" \
             --output ./artifacts
 
@@ -177,8 +169,8 @@ dotnet nuget push ./artifacts/*.nupkg --source C:\LocalNuGet
 ## Doporučený postup vydání
 
 1. Aktualizujte `VersionPrefix` (a případně `VersionSuffix`) v `Directory.Build.props`.
-2. Spusťte testy: `dotnet test RuleEval.sln -c Release`.
-3. Zabalte: `dotnet pack RuleEval.sln -c Release --output ./artifacts`.
+2. Spusťte testy: `dotnet test RuleEval.slnx -c Release`.
+3. Zabalte: `dotnet pack RuleEval.slnx -c Release --output ./artifacts`.
 4. Ověřte obsah `.nupkg` (např. přes [NuGet Package Explorer](https://github.com/NuGetPackageExplorer/NuGetPackageExplorer)).
 5. Vytvořte Git tag: `git tag v1.0.0 && git push origin v1.0.0`.
 6. GitHub Actions workflow automaticky zabalí a publikuje balíčky.

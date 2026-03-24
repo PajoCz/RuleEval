@@ -6,6 +6,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
-    <ProjectReference Include="../RuleEval.Diagnostics/RuleEval.Diagnostics.csproj" />
   </ItemGroup>
 </Project>

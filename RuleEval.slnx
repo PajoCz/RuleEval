@@ -7,13 +7,10 @@
   <Project Path="benchmarks/RuleEval.Benchmarks/RuleEval.Benchmarks.csproj" />
   <Project Path="samples/RuleEval.Samples/RuleEval.Samples.csproj" />
   <Project Path="src/RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
-  <Project Path="src/RuleEval.Caching/RuleEval.Caching.csproj" />
   <Project Path="src/RuleEval.Core/RuleEval.Core.csproj" />
-  <Project Path="src/RuleEval.Database.Abstractions/RuleEval.Database.Abstractions.csproj" />
   <Project Path="src/RuleEval.Database.DependencyInjection/RuleEval.Database.DependencyInjection.csproj" />
   <Project Path="src/RuleEval.Database/RuleEval.Database.csproj" />
   <Project Path="src/RuleEval.DependencyInjection/RuleEval.DependencyInjection.csproj" />
-  <Project Path="src/RuleEval.Diagnostics/RuleEval.Diagnostics.csproj" />
   <Project Path="tests/RuleEval.Tests.Integration/RuleEval.Tests.Integration.csproj" />
   <Project Path="tests/RuleEval.Tests.Unit/RuleEval.Tests.Unit.csproj" />
 </Solution>

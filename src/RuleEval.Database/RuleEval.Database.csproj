@@ -9,8 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="../RuleEval.Abstractions/RuleEval.Abstractions.csproj" />
     <ProjectReference Include="../RuleEval.Core/RuleEval.Core.csproj" />
-    <ProjectReference Include="../RuleEval.Caching/RuleEval.Caching.csproj" />
-    <ProjectReference Include="../RuleEval.Database.Abstractions/RuleEval.Database.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Npgsql" />

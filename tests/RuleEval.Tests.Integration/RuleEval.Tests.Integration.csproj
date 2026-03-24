@@ -4,7 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/RuleEval.Database/RuleEval.Database.csproj" />
-    <ProjectReference Include="../../src/RuleEval.Caching/RuleEval.Caching.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

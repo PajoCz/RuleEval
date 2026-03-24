@@ -13,12 +13,14 @@ Veřejné NuGet balíčky jsou označeny **tučně**. Ostatní jsou interní pro
 │  RuleEval.Database.DependencyInjection  [veřejný NuGet]      │
 │  RuleEval.DependencyInjection           [veřejný NuGet]      │  ← DI integrace (volitelné)
 ├──────────────────────────────────────────────────────────────┤
-│  RuleEval.Database                      [veřejný NuGet]      │  ← DB adaptér (PostgreSQL, SQL Server)
-│  RuleEval.Database.Abstractions         [interní projekt]    │
-├──────────────────────────────────────────────────────────────┤
-│  RuleEval.Diagnostics  [interní]  RuleEval.Caching [interní] │  ← interní doplňky
+│  RuleEval.Database                      [veřejný NuGet]      │  ← DB adaptér + contracts
+│                                         (IRuleSetSource,      │
+│                                          IRuleSetRepository,  │
+│                                          DbRuleSetDefinition) │
 ├──────────────────────────────────────────────────────────────┤
 │  RuleEval  (projekt: RuleEval.Core)     [veřejný NuGet]      │  ← evaluační engine + matchery
+│                                         + caching             │
+│                                         + diagnostics hooks   │
 ├──────────────────────────────────────────────────────────────┤
 │  RuleEval.Abstractions                  [veřejný NuGet]      │  ← contracts, doménový model
 └──────────────────────────────────────────────────────────────┘
@@ -29,16 +31,14 @@ Veřejné NuGet balíčky jsou označeny **tučně**. Ostatní jsou interní pro
 | Projekt | NuGet ID | Typ |
 |---|---|---|
 | `RuleEval.Abstractions` | `RuleEval.Abstractions` | veřejný NuGet balíček |
-| `RuleEval.Core` | `RuleEval` | veřejný NuGet balíček |
+| `RuleEval.Core` | `RuleEval` | veřejný NuGet balíček (obsahuje caching + diagnostics) |
 | `RuleEval.DependencyInjection` | `RuleEval.DependencyInjection` | veřejný NuGet balíček |
-| `RuleEval.Database` | `RuleEval.Database` | veřejný NuGet balíček |
+| `RuleEval.Database` | `RuleEval.Database` | veřejný NuGet balíček (obsahuje DB contracts) |
 | `RuleEval.Database.DependencyInjection` | `RuleEval.Database.DependencyInjection` | veřejný NuGet balíček |
-| `RuleEval.Caching` | — | interní projekt (není publikován) |
-| `RuleEval.Diagnostics` | — | interní projekt (není publikován) |
-| `RuleEval.Database.Abstractions` | — | interní projekt (není publikován) |
 
-> `RuleEval.Core` je název interního projektu; veřejný NuGet balíček se jmenuje `RuleEval`.
-> Interní projekty jsou zahrnuty do příslušných veřejných balíčků přes project reference.
+> `RuleEval.Core` je název projektu; veřejný NuGet balíček se jmenuje `RuleEval`.
+> Caching (`IRuleSetCache`, `MemoryRuleSetCache`) a diagnostics (`IRuleEvaluationObserver`) jsou součástí projektu `RuleEval.Core`.
+> DB contracts (`IRuleSetSource`, `IRuleSetRepository`, `DbRuleSetDefinition`) jsou součástí projektu `RuleEval.Database`.
 
 ## Doménový model (`RuleEval.Abstractions`)
 
@@ -135,7 +135,7 @@ var registry = MatcherRegistry.CreateDefault().WithMatcher(new PrefixMatcher());
 var evaluator = new RuleSetEvaluator(registry);
 ```
 
-## Cache (interní projekt `RuleEval.Caching`)
+## Cache (`RuleEval.Core`)
 
 ```csharp
 public interface IRuleSetCache
