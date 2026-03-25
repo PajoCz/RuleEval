@@ -9,7 +9,8 @@ namespace RuleEval.Tests.Integration;
 
 /// <summary>
 /// Integrační testy proti skutečnému SQL Serveru.
-/// Před spuštěním spusť sql/integration-test-mssql.sql na cílové DB.
+/// DB schéma (tabulky, SP, testovací data) se vytváří automaticky v <see cref="InitializeAsync"/>.
+/// Žádné ruční kroky nejsou potřeba.
 ///
 /// Připojovací řetězec (výchozí nebo env. proměnná):
 ///   Server=.;Database=RuleEval;Trusted_Connection=True;TrustServerCertificate=True;
@@ -43,6 +44,8 @@ public sealed class RuleEvalMssqlIntegrationTests : IAsyncLifetime
             return;
         }
 
+        await SetupDatabaseAsync();
+
         var executor = new AdoCommandExecutor(cs => new SqlConnection(cs));
         var source = new SqlServerRuleSetSource(
             executor,
@@ -50,6 +53,98 @@ public sealed class RuleEvalMssqlIntegrationTests : IAsyncLifetime
             "[RuleEvalTest].p_GetSchemaColBySchemaCode",
             "[RuleEvalTest].p_GetDataBySchemaCode");
         _repository = new RuleSetRepository(source, new NoCacheRuleSetCache());
+    }
+
+    private static async Task SetupDatabaseAsync()
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+
+        foreach (var batch in SetupBatches())
+        {
+            await using var cmd = new SqlCommand(batch, conn);
+            await cmd.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static IEnumerable<string> SetupBatches()
+    {
+        yield return
+            "IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'RuleEvalTest') " +
+            "EXEC sp_executesql N'CREATE SCHEMA [RuleEvalTest]'";
+
+        // Tabulky se vždy přetvářejí, aby schéma odpovídalo aktuálnímu kontraktu.
+        yield return "DROP TABLE IF EXISTS [RuleEvalTest].[Data]";
+        yield return "DROP TABLE IF EXISTS [RuleEvalTest].[SchemaCol]";
+
+        yield return @"
+CREATE TABLE [RuleEvalTest].[SchemaCol]
+(
+    SchemaColId INT           IDENTITY(1,1) PRIMARY KEY,
+    SchemaCode  NVARCHAR(100) NOT NULL,
+    Code        NVARCHAR(100) NOT NULL,
+    ColNr       INT           NOT NULL,
+    [Order]     INT           NOT NULL,
+    [Type]      INT           NOT NULL    -- 0 = Input, 1 = Output
+)";
+
+        yield return @"
+CREATE TABLE [RuleEvalTest].[Data]
+(
+    TranslatorDataId INT           IDENTITY(1,1) PRIMARY KEY,
+    SchemaCode       NVARCHAR(100) NOT NULL,
+    Col01  NVARCHAR(500) NULL, Col02  NVARCHAR(500) NULL, Col03  NVARCHAR(500) NULL,
+    Col04  NVARCHAR(500) NULL, Col05  NVARCHAR(500) NULL, Col06  NVARCHAR(500) NULL,
+    Col07  NVARCHAR(500) NULL, Col08  NVARCHAR(500) NULL, Col09  NVARCHAR(500) NULL,
+    Col10  NVARCHAR(500) NULL, Col11  NVARCHAR(500) NULL, Col12  NVARCHAR(500) NULL,
+    Col13  NVARCHAR(500) NULL, Col14  NVARCHAR(500) NULL, Col15  NVARCHAR(500) NULL,
+    Col16  NVARCHAR(500) NULL, Col17  NVARCHAR(500) NULL, Col18  NVARCHAR(500) NULL,
+    Col19  NVARCHAR(500) NULL, Col20  NVARCHAR(500) NULL
+)";
+
+        // RuleEvalTest_Pricing: Segment (regex, ColNr=1, Order=1) + Age (decimal-interval, ColNr=2, Order=2) → Formula
+        yield return @"
+INSERT INTO [RuleEvalTest].[SchemaCol] (SchemaCode, Code, ColNr, [Order], [Type]) VALUES
+    ('RuleEvalTest_Pricing', 'Segment', 1, 1, 0),
+    ('RuleEvalTest_Pricing', 'Age',     2, 2, 0),
+    ('RuleEvalTest_Pricing', 'Formula', 3, 3, 1)";
+
+        yield return @"
+INSERT INTO [RuleEvalTest].[Data] (SchemaCode, Col01, Col02, Col03) VALUES
+    ('RuleEvalTest_Pricing', '.*Perspektiva.*', 'INTERVAL<15;24>', 'C2/240'),
+    ('RuleEvalTest_Pricing', '.*Standard.*',    'INTERVAL<25;65>', 'D3/120')";
+
+        // RuleEvalTest_OrderVsColNr: Order a ColNr se záměrně liší
+        //   Segment: ColNr=2, Order=1 → fyzicky Col02
+        //   Age:     ColNr=1, Order=2 → fyzicky Col01
+        yield return @"
+INSERT INTO [RuleEvalTest].[SchemaCol] (SchemaCode, Code, ColNr, [Order], [Type]) VALUES
+    ('RuleEvalTest_OrderVsColNr', 'Segment', 2, 1, 0),
+    ('RuleEvalTest_OrderVsColNr', 'Age',     1, 2, 0),
+    ('RuleEvalTest_OrderVsColNr', 'Result',  3, 3, 1)";
+
+        yield return @"
+INSERT INTO [RuleEvalTest].[Data] (SchemaCode, Col01, Col02, Col03) VALUES
+    ('RuleEvalTest_OrderVsColNr', 'INTERVAL<15;24>', '.*Perspektiva.*', 'OK')";
+
+        yield return @"
+CREATE OR ALTER PROCEDURE [RuleEvalTest].[p_GetSchemaColBySchemaCode]
+    @Code NVARCHAR(100)
+AS
+    SELECT Code, ColNr, [Order], [Type]
+    FROM   [RuleEvalTest].[SchemaCol]
+    WHERE  SchemaCode = @Code
+    ORDER  BY [Order]";
+
+        yield return @"
+CREATE OR ALTER PROCEDURE [RuleEvalTest].[p_GetDataBySchemaCode]
+    @Code NVARCHAR(100)
+AS
+    SELECT TranslatorDataId,
+           Col01, Col02, Col03, Col04, Col05, Col06, Col07, Col08, Col09, Col10,
+           Col11, Col12, Col13, Col14, Col15, Col16, Col17, Col18, Col19, Col20
+    FROM   [RuleEvalTest].[Data]
+    WHERE  SchemaCode = @Code";
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

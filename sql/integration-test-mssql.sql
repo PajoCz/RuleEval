@@ -10,9 +10,13 @@ GO
 
 -- ---------------------------------------------------------------
 -- Tabulka definic sloupců (vrací p_GetSchemaColBySchemaCode)
--- Nový kontrakt: Code, ColNr, Order, Type (0=Input, 1=Output)
+-- Kontrakt: Code, ColNr, Order, Type (0=Input, 1=Output)
+-- DROP + CREATE zajistí čistý stav při každém spuštění skriptu.
 -- ---------------------------------------------------------------
-IF OBJECT_ID('[RuleEvalTest].[SchemaCol]', 'U') IS NULL
+DROP TABLE IF EXISTS [RuleEvalTest].[Data];      -- nejdřív závislá data
+DROP TABLE IF EXISTS [RuleEvalTest].[SchemaCol];
+GO
+
 CREATE TABLE [RuleEvalTest].[SchemaCol]
 (
     SchemaColId  INT           IDENTITY(1,1) PRIMARY KEY,
@@ -26,9 +30,8 @@ GO
 
 -- ---------------------------------------------------------------
 -- Datová tabulka (vrací p_GetDataBySchemaCode)
--- První sloupec = technický identifikátor řádku (diagnostika)
+-- TranslatorDataId = diagnostický identifikátor řádku (předán jako PK)
 -- ---------------------------------------------------------------
-IF OBJECT_ID('[RuleEvalTest].[Data]', 'U') IS NULL
 CREATE TABLE [RuleEvalTest].[Data]
 (
     TranslatorDataId INT           IDENTITY(1,1) PRIMARY KEY,
