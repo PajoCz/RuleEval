@@ -7,7 +7,7 @@
 [![RuleEval.Database.DependencyInjection](https://img.shields.io/nuget/v/RuleEval.Database.DependencyInjection.svg?label=RuleEval.Database.DependencyInjection)](https://www.nuget.org/packages/RuleEval.Database.DependencyInjection)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-📚 Dokumentace: [architecture.md](docs/architecture.md) · [nuget-packages.md](docs/nuget-packages.md) · [publishing-nuget.md](docs/publishing-nuget.md)
+📚 Dokumentace: [architecture.md](docs/architecture.md) · [auditing.md](docs/auditing.md) · [observability.md](docs/observability.md) · [nuget-packages.md](docs/nuget-packages.md) · [publishing-nuget.md](docs/publishing-nuget.md)
 
 Moderní open-source rule engine pro **.NET 8**
 
@@ -215,6 +215,7 @@ await repository.InvalidateCacheAsync(key);
 | Dokument | Obsah |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Architektura, design rozhodnutí, závislosti mezi vrstvami, evaluační flow |
+| [docs/auditing.md](docs/auditing.md) | Business/audit observability — `IRuleEvaluationAuditSink`, `RuleEvaluationAuditEvent`, `AddRuleEvalAuditing()` |
 | [docs/observability.md](docs/observability.md) | Technická observability: `ILogger`, `ActivitySource` (OpenTelemetry), `Meter` (metriky) |
 | [docs/nuget-packages.md](docs/nuget-packages.md) | Přehled balíčků, typické instalační scénáře, dependency graph |
 | [docs/publishing-nuget.md](docs/publishing-nuget.md) | Jak verzovat, zabalit a publikovat NuGet balíčky |
