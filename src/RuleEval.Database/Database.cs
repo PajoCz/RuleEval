@@ -1,10 +1,13 @@
 using System.Collections.Immutable;
 using System.Data;
 using System.Data.Common;
+using System.Runtime.CompilerServices;
 using RuleEval.Abstractions;
 using RuleEval.Caching;
 using RuleEval.Core;
 using RuleEval.Database.Abstractions;
+
+[assembly: InternalsVisibleTo("RuleEval.Tests.Unit")]
 
 namespace RuleEval.Database;
 
@@ -18,7 +21,7 @@ public sealed class DbRuleSetMapper
             throw new InvalidRuleDefinitionException("Database rule set definition must include column metadata.");
         }
 
-        var orderedColumns = definition.Columns.OrderBy(static column => column.ColumnOrder).ToArray();
+        var orderedColumns = definition.Columns.OrderBy(static column => column.Order).ToArray();
         var inputColumns = orderedColumns.Where(static column => column.Role == RuleFieldRole.Input).ToArray();
         if (inputColumns.Length == 0)
         {
@@ -31,38 +34,34 @@ public sealed class DbRuleSetMapper
             var row = definition.Rows[rowIndex];
             var conditions = ImmutableArray.CreateBuilder<Condition>(inputColumns.Length);
             var outputs = ImmutableArray.CreateBuilder<OutputValue>();
-            PrimaryKeyValue? primaryKey = null;
 
             foreach (var column in orderedColumns)
             {
-                if (!row.Values.TryGetValue(column.ColumnName, out var value))
+                var colKey = $"Col{column.ColNr:D2}";
+                if (!row.ColValues.TryGetValue(colKey, out var value))
                 {
-                    throw new InvalidRuleDefinitionException($"Row {rowIndex} is missing value for column '{column.ColumnName}'.");
+                    throw new InvalidRuleDefinitionException($"Row {rowIndex} is missing value for column '{colKey}'.");
                 }
 
-                var fieldName = column.FieldName ?? column.ColumnName;
                 switch (column.Role)
                 {
                     case RuleFieldRole.Input:
-                        conditions.Add(new Condition(fieldName, value ?? string.Empty, conditions.Count, column.MatcherKey ?? DefaultMatcherKeys.Auto));
+                        conditions.Add(new Condition(column.Code, value ?? string.Empty, conditions.Count));
                         break;
                     case RuleFieldRole.Output:
-                        outputs.Add(new OutputValue(fieldName, value, outputs.Count));
-                        break;
-                    case RuleFieldRole.PrimaryKey:
-                        primaryKey = new PrimaryKeyValue(fieldName, value);
+                        outputs.Add(new OutputValue(column.Code, value, outputs.Count));
                         break;
                     default:
                         throw new InvalidRuleDefinitionException($"Unsupported rule field role '{column.Role}'.");
                 }
             }
 
-            rules.Add(RuleEval.Abstractions.Rule.Create(rowIndex, conditions.ToImmutable(), outputs.ToImmutable(), primaryKey));
+            rules.Add(RuleEval.Abstractions.Rule.Create(rowIndex, conditions.ToImmutable(), outputs.ToImmutable(), row.PrimaryKey));
         }
 
         return RuleSet.Create(
             definition.Key,
-            inputColumns.Select(static column => column.FieldName ?? column.ColumnName),
+            inputColumns.Select(static column => column.Code),
             rules.ToImmutable().ToArray(),
             definition.Metadata);
     }
@@ -256,7 +255,7 @@ public sealed class SqlServerRuleSetSource : IRuleSetSource
         var columnRows = await _executor.QueryAsync(_connectionString, _columnsStoredProcedure, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
         var dataRows = await _executor.QueryAsync(_connectionString, _rowsStoredProcedure, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
         var columns = RelationalSourceMapping.MapColumns(columnRows);
-        return new DbRuleSetDefinition(key, columns, RelationalSourceMapping.MapRows(dataRows, columns));
+        return new DbRuleSetDefinition(key, columns, RelationalSourceMapping.MapRows(dataRows));
     }
 
 }
@@ -265,33 +264,42 @@ internal static class RelationalSourceMapping
 {
     public static IReadOnlyList<RuleSetColumnDefinition> MapColumns(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
         => rows.Select(static row => new RuleSetColumnDefinition(
-            Convert.ToString(row["Name"]) ?? throw new InvalidOperationException("Missing Name."),
+            Convert.ToString(row["Code"]) ?? throw new InvalidOperationException("Missing Code."),
             Convert.ToInt32(row["Order"]),
             MapRole(Convert.ToInt32(row["Type"])),
-            Convert.ToString(row.TryGetValue("FieldName", out var fieldName) ? fieldName : null),
-            Convert.ToString(row.TryGetValue("MatcherKey", out var matcherKey) ? matcherKey : null),
             Convert.ToInt32(row["ColNr"])))
-            .OrderBy(static column => column.ColumnOrder)
+            .OrderBy(static column => column.Order)
             .ToArray();
 
-    public static IReadOnlyList<RuleSetRowData> MapRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, IReadOnlyList<RuleSetColumnDefinition> columns)
-        => rows.Select(row =>
+    public static IReadOnlyList<RuleSetRowData> MapRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
+        => rows.Select(static row =>
         {
-            var mapped = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-            foreach (var column in columns)
+            var pkColumns = row.Keys.Where(static k => !IsColXxKey(k)).ToArray();
+            PrimaryKeyValue? primaryKey = pkColumns.Length switch
             {
-                var colKey = $"Col{(column.SourceColumnNumber ?? column.ColumnOrder):D2}";
-                mapped[column.ColumnName] = row.TryGetValue(colKey, out var value) ? value : null;
-            }
-            return new RuleSetRowData(mapped);
+                0 => null,
+                1 => new PrimaryKeyValue(pkColumns[0], row[pkColumns[0]]),
+                _ => throw new InvalidOperationException($"Data row must contain exactly one primary key column (non-ColXX); found {pkColumns.Length}: {string.Join(", ", pkColumns)}.")
+            };
+
+            var colValues = row
+                .Where(static kvp => IsColXxKey(kvp.Key))
+                .ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+
+            return new RuleSetRowData(primaryKey, colValues);
         }).ToArray();
+
+    private static bool IsColXxKey(string key)
+        => key.Length == 5
+            && key.StartsWith("Col", StringComparison.OrdinalIgnoreCase)
+            && char.IsDigit(key[3])
+            && char.IsDigit(key[4]);
 
     private static RuleFieldRole MapRole(int type) => type switch
     {
-        1 => RuleFieldRole.Input,
-        2 => RuleFieldRole.Output,
-        3 => RuleFieldRole.PrimaryKey,
-        _ => throw new InvalidOperationException($"Unknown column type '{type}'.")
+        0 => RuleFieldRole.Input,
+        1 => RuleFieldRole.Output,
+        _ => throw new InvalidOperationException($"Unknown column type '{type}'. Supported values: 0 (Input), 1 (Output).")
     };
 }
 
@@ -316,6 +324,6 @@ public sealed class PostgreSqlRuleSetSource : IRuleSetSource
         var columnRows = await _executor.QueryAsync(_connectionString, $"select * from {_columnsFunction}(@code)", parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
         var dataRows = await _executor.QueryAsync(_connectionString, $"select * from {_rowsFunction}(@code)", parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
         var columns = RelationalSourceMapping.MapColumns(columnRows);
-        return new DbRuleSetDefinition(key, columns, RelationalSourceMapping.MapRows(dataRows, columns));
+        return new DbRuleSetDefinition(key, columns, RelationalSourceMapping.MapRows(dataRows));
     }
 }

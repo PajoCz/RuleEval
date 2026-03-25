@@ -55,19 +55,19 @@ file sealed class InMemoryRuleSetSource : IRuleSetSource
     {
         var columns = new List<RuleSetColumnDefinition>
         {
-            new("segment", 0, RuleFieldRole.Input, "segment", DefaultMatcherKeys.Regex),
-            new("age", 1, RuleFieldRole.Input, "age", DefaultMatcherKeys.DecimalInterval),
-            new("formula", 2, RuleFieldRole.Output, "formula"),
-            new("id", 3, RuleFieldRole.PrimaryKey, "id"),
+            new("segment", 1, RuleFieldRole.Input, 1),
+            new("age", 2, RuleFieldRole.Input, 2),
+            new("formula", 3, RuleFieldRole.Output, 3),
         };
 
-        var rows = _ruleSet.Rules.Select(rule => new RuleSetRowData(new Dictionary<string, object?>
-        {
-            ["segment"] = rule.Conditions[0].Expected,
-            ["age"] = rule.Conditions[1].Expected,
-            ["formula"] = rule.Outputs[0].RawValue,
-            ["id"] = rule.PrimaryKey?.Value,
-        })).ToArray();
+        var rows = _ruleSet.Rules.Select(rule => new RuleSetRowData(
+            rule.PrimaryKey,
+            new Dictionary<string, object?>
+            {
+                ["Col01"] = rule.Conditions[0].Expected,
+                ["Col02"] = rule.Conditions[1].Expected,
+                ["Col03"] = rule.Outputs[0].RawValue,
+            })).ToArray();
 
         return ValueTask.FromResult(new DbRuleSetDefinition(key, columns, rows));
     }

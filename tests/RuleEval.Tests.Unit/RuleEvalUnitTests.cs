@@ -231,21 +231,243 @@ public sealed class RuleEvalUnitTests
         => new(
             "pricing",
             [
-                new RuleSetColumnDefinition("segment", 0, RuleFieldRole.Input, "segment", DefaultMatcherKeys.Regex),
-                new RuleSetColumnDefinition("age", 1, RuleFieldRole.Input, "age", DefaultMatcherKeys.DecimalInterval),
-                new RuleSetColumnDefinition("formula", 2, RuleFieldRole.Output, "formula"),
-                new RuleSetColumnDefinition("id", 3, RuleFieldRole.PrimaryKey, "id"),
+                new RuleSetColumnDefinition("segment", 1, RuleFieldRole.Input, 1),
+                new RuleSetColumnDefinition("age", 2, RuleFieldRole.Input, 2),
+                new RuleSetColumnDefinition("formula", 3, RuleFieldRole.Output, 3),
             ],
             [
-                new RuleSetRowData(new Dictionary<string, object?>
+                new RuleSetRowData(
+                    new PrimaryKeyValue("DataId", 1),
+                    new Dictionary<string, object?>
+                    {
+                        ["Col01"] = ".*Perspektiva.*",
+                        ["Col02"] = "INTERVAL<15;24>",
+                        ["Col03"] = "C2/240",
+                    }),
+            ]);
+
+    [Fact]
+    public void DbMapper_TypeMapping_Input0_Output1()
+    {
+        var mapper = new DbRuleSetMapper();
+        var definition = new DbRuleSetDefinition(
+            "type-test",
+            [
+                new RuleSetColumnDefinition("field1", 1, RuleFieldRole.Input, 1),
+                new RuleSetColumnDefinition("out1", 2, RuleFieldRole.Output, 2),
+            ],
+            [
+                new RuleSetRowData(null, new Dictionary<string, object?> { ["Col01"] = "A", ["Col02"] = "B" }),
+            ]);
+
+        var ruleSet = mapper.Map(definition);
+
+        Assert.Equal("field1", ruleSet.InputFields[0]);
+        Assert.Equal("out1", ruleSet.Rules[0].Outputs[0].Name);
+    }
+
+    [Fact]
+    public void DbMapper_InvalidType_ThrowsOnMapRole()
+    {
+        var rows = new List<IReadOnlyDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["Code"] = "x", ["ColNr"] = 1, ["Order"] = 1, ["Type"] = 99 },
+        };
+
+        Assert.Throws<InvalidOperationException>(() => RelationalSourceMappingTestAccessor.MapColumns(rows));
+    }
+
+    [Fact]
+    public void DbMapper_OrderDiffersFromColNr_PositionalUsesOrder()
+    {
+        // Order=1 → ColNr=2 (Segment in Col02), Order=2 → ColNr=1 (Age in Col01)
+        var mapper = new DbRuleSetMapper();
+        var definition = new DbRuleSetDefinition(
+            "order-vs-colnr",
+            [
+                new RuleSetColumnDefinition("Segment", 1, RuleFieldRole.Input, 2),
+                new RuleSetColumnDefinition("Age", 2, RuleFieldRole.Input, 1),
+                new RuleSetColumnDefinition("Result", 3, RuleFieldRole.Output, 3),
+            ],
+            [
+                new RuleSetRowData(null, new Dictionary<string, object?>
                 {
-                    ["segment"] = ".*Perspektiva.*",
-                    ["age"] = "INTERVAL<15;24>",
-                    ["formula"] = "C2/240",
-                    ["id"] = 1,
+                    ["Col01"] = "INTERVAL<15;24>",  // Age pattern in Col01
+                    ["Col02"] = ".*Perspektiva.*",   // Segment pattern in Col02
+                    ["Col03"] = "OK",
                 }),
             ]);
 
+        var ruleSet = mapper.Map(definition);
+
+        // InputFields ordered by Order: [Segment(Order=1), Age(Order=2)]
+        Assert.Equal(new[] { "Segment", "Age" }, ruleSet.InputFields.ToArray());
+
+        var evaluator = new RuleSetEvaluator();
+        // Positional: first arg maps to Segment (Order=1), second to Age (Order=2)
+        var result = evaluator.EvaluateFirst(ruleSet, EvaluationContext.FromPositional("7BN Perspektiva Důchod", 18m));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+        Assert.Equal("OK", result.Match?.Outputs[0].RawValue);
+    }
+
+    [Fact]
+    public void DbMapper_NamedEvaluation_UsesCodes()
+    {
+        var mapper = new DbRuleSetMapper();
+        var definition = new DbRuleSetDefinition(
+            "named-test",
+            [
+                new RuleSetColumnDefinition("Segment", 1, RuleFieldRole.Input, 1),
+                new RuleSetColumnDefinition("Result", 2, RuleFieldRole.Output, 2),
+            ],
+            [
+                new RuleSetRowData(null, new Dictionary<string, object?> { ["Col01"] = ".*Foo.*", ["Col02"] = "found" }),
+            ]);
+
+        var ruleSet = mapper.Map(definition);
+
+        var evaluator = new RuleSetEvaluator();
+        var result = evaluator.EvaluateFirst(ruleSet,
+            EvaluationContext.FromNamed(new Dictionary<string, object?> { ["Segment"] = "FooBar" }));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+        Assert.Equal("found", result.Match?.Outputs[0].RawValue);
+    }
+
+    [Fact]
+    public void DbMapper_PrimaryKeyFromFirstDataColumn()
+    {
+        var mapper = new DbRuleSetMapper();
+        var definition = new DbRuleSetDefinition(
+            "pk-test",
+            [
+                new RuleSetColumnDefinition("field", 1, RuleFieldRole.Input, 1),
+                new RuleSetColumnDefinition("out", 2, RuleFieldRole.Output, 2),
+            ],
+            [
+                new RuleSetRowData(
+                    new PrimaryKeyValue("TranslatorDataId", 42),
+                    new Dictionary<string, object?> { ["Col01"] = ".*", ["Col02"] = "val" }),
+            ]);
+
+        var ruleSet = mapper.Map(definition);
+
+        var evaluator = new RuleSetEvaluator();
+        var result = evaluator.EvaluateFirst(ruleSet, EvaluationContext.FromPositional("anything"));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+        Assert.Equal("TranslatorDataId", result.Match?.PrimaryKey?.Name);
+        Assert.Equal(42, result.Match?.PrimaryKey?.Value);
+    }
+
+    [Fact]
+    public void DbMapper_NoSchemaPrimaryKey_EvaluationStillWorks()
+    {
+        var mapper = new DbRuleSetMapper();
+        var definition = new DbRuleSetDefinition(
+            "no-pk-test",
+            [
+                new RuleSetColumnDefinition("field", 1, RuleFieldRole.Input, 1),
+                new RuleSetColumnDefinition("out", 2, RuleFieldRole.Output, 2),
+            ],
+            [
+                new RuleSetRowData(null, new Dictionary<string, object?> { ["Col01"] = ".*", ["Col02"] = "val" }),
+            ]);
+
+        var ruleSet = mapper.Map(definition);
+
+        var evaluator = new RuleSetEvaluator();
+        var result = evaluator.EvaluateFirst(ruleSet, EvaluationContext.FromPositional("anything"));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+        Assert.Null(result.Match?.PrimaryKey);
+    }
+
+    [Fact]
+    public void DbMapper_PrimaryKeyDoesNotAffectMatching()
+    {
+        var mapper = new DbRuleSetMapper();
+        var definition = new DbRuleSetDefinition(
+            "pk-no-match-test",
+            [
+                new RuleSetColumnDefinition("code", 1, RuleFieldRole.Input, 1),
+                new RuleSetColumnDefinition("out", 2, RuleFieldRole.Output, 2),
+            ],
+            [
+                new RuleSetRowData(new PrimaryKeyValue("RowId", 999), new Dictionary<string, object?> { ["Col01"] = "EXACT", ["Col02"] = "result" }),
+            ]);
+
+        var ruleSet = mapper.Map(definition);
+        var evaluator = new RuleSetEvaluator();
+
+        // PK value (999) has no effect on match: only Col01 pattern matters
+        Assert.Equal(EvaluationStatus.Matched, evaluator.EvaluateFirst(ruleSet, EvaluationContext.FromPositional("EXACT")).Status);
+        Assert.Equal(EvaluationStatus.NoMatch, evaluator.EvaluateFirst(ruleSet, EvaluationContext.FromPositional("OTHER")).Status);
+    }
+
+    [Fact]
+    public void RelationalSourceMapping_MapColumns_ParsesCodeColNrOrderType()
+    {
+        var rows = new List<IReadOnlyDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["Code"] = "Segment", ["ColNr"] = 2, ["Order"] = 1, ["Type"] = 0 },
+            new Dictionary<string, object?> { ["Code"] = "Age",     ["ColNr"] = 1, ["Order"] = 2, ["Type"] = 0 },
+            new Dictionary<string, object?> { ["Code"] = "Result",  ["ColNr"] = 3, ["Order"] = 3, ["Type"] = 1 },
+        };
+
+        var columns = RelationalSourceMappingTestAccessor.MapColumns(rows);
+
+        Assert.Equal(3, columns.Count);
+        Assert.Equal("Segment", columns[0].Code);
+        Assert.Equal(2, columns[0].ColNr);
+        Assert.Equal(1, columns[0].Order);
+        Assert.Equal(RuleFieldRole.Input, columns[0].Role);
+        Assert.Equal(RuleFieldRole.Output, columns[2].Role);
+    }
+
+    [Fact]
+    public void RelationalSourceMapping_MapRows_DetectsPrimaryKeyColumn()
+    {
+        var rows = new List<IReadOnlyDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["TranslatorDataId"] = 7, ["Col01"] = "A", ["Col02"] = "B" },
+        };
+
+        var mapped = RelationalSourceMappingTestAccessor.MapRows(rows);
+
+        Assert.Single(mapped);
+        Assert.Equal("TranslatorDataId", mapped[0].PrimaryKey?.Name);
+        Assert.Equal(7, mapped[0].PrimaryKey?.Value);
+        Assert.Equal("A", mapped[0].ColValues["Col01"]);
+        Assert.Equal("B", mapped[0].ColValues["Col02"]);
+        Assert.DoesNotContain("TranslatorDataId", mapped[0].ColValues.Keys);
+    }
+
+    [Fact]
+    public void RelationalSourceMapping_MapRows_NoPrimaryKey_WhenOnlyColXX()
+    {
+        var rows = new List<IReadOnlyDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["Col01"] = "A", ["Col02"] = "B" },
+        };
+
+        var mapped = RelationalSourceMappingTestAccessor.MapRows(rows);
+
+        Assert.Single(mapped);
+        Assert.Null(mapped[0].PrimaryKey);
+    }
+
+    [Fact]
+    public void RelationalSourceMapping_MapRows_ThrowsForMultipleNonColXXColumns()
+    {
+        var rows = new List<IReadOnlyDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["DataId"] = 1, ["SchemaCode"] = "x", ["Col01"] = "A" },
+        };
+
+        Assert.Throws<InvalidOperationException>(() => RelationalSourceMappingTestAccessor.MapRows(rows));
+    }
     private sealed class CountingRuleSetSource : IRuleSetSource
     {
         private readonly DbRuleSetDefinition _definition;
@@ -263,4 +485,13 @@ public sealed class RuleEvalUnitTests
             return ValueTask.FromResult(_definition);
         }
     }
+}
+
+internal static class RelationalSourceMappingTestAccessor
+{
+    public static IReadOnlyList<RuleSetColumnDefinition> MapColumns(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
+        => RelationalSourceMapping.MapColumns(rows);
+
+    public static IReadOnlyList<RuleSetRowData> MapRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
+        => RelationalSourceMapping.MapRows(rows);
 }

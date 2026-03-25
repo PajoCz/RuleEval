@@ -91,8 +91,16 @@ dotnet add package RuleEval.Database
 dotnet add package RuleEval.Database.DependencyInjection
 ```
 
-DB schéma vrací sloupce (`Name`, `ColNr`, `Order`, `Type`) a data (`Col01`, `Col02`, …).
-`ColNr` určuje fyzický sloupec v datové tabulce, `Order` určuje pořadí pro poziční vyhodnocení.
+DB metadata stored procedure vrací sloupce (`Code`, `ColNr`, `Order`, `Type`) a datová stored procedure vrací první technický identifikátor řádku (např. `TranslatorDataId`) a za ním `Col01`, `Col02`, …
+
+| Metadata sloupec | Popis |
+|---|---|
+| `Code` | Logický/business název pole (vstup nebo výstup) |
+| `ColNr` | Fyzické číslo sloupce dat (`Col01`..`Col20`) |
+| `Order` | Pořadí pro poziční evaluaci (`EvaluationContext.FromPositional`) |
+| `Type` | `0` = Input, `1` = Output |
+
+**První datový sloupec** (např. `TranslatorDataId`) je diagnostický identifikátor – automaticky se stane `MatchResult.PrimaryKey`. Neovlivňuje výsledek evaluace.
 
 ### Inicializace v `Program.cs`
 
@@ -111,6 +119,28 @@ builder.Services.AddRuleEvalDatabase(
 ```
 
 Výsledkem je, že `IRuleSetRepository` je singleton s 30minutovou cache. Každé volání `LoadAsync` / `EvaluateFirstAsync` / `GetFirstOutputAsync` automaticky čte z cache; do DB se jde jen při prvním načtení nebo po invalidaci.
+
+### SQL kontrakt – metadata stored procedure
+
+```sql
+-- Vrací: Code, ColNr, Order, Type
+-- Type: 0 = Input, 1 = Output
+SELECT Code, ColNr, [Order], [Type]
+FROM   SchemaCol
+WHERE  SchemaCode = @Code
+ORDER  BY [Order];
+```
+
+### SQL kontrakt – datová stored procedure
+
+```sql
+-- První sloupec = diagnostický identifikátor (stane se PrimaryKey)
+-- Následují Col01..Col20
+SELECT TranslatorDataId,
+       Col01, Col02, Col03, ...
+FROM   Data
+WHERE  SchemaCode = @Code;
+```
 
 ### Použití v business kódu
 
