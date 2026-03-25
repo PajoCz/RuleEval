@@ -3,6 +3,8 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RuleEval.Abstractions;
 
 namespace RuleEval.Core;
@@ -262,17 +264,178 @@ public static class DecimalIntervalParser
 public sealed class RuleSetEvaluator
 {
     private readonly MatcherRegistry _matcherRegistry;
+    private readonly ILogger<RuleSetEvaluator> _logger;
 
-    public RuleSetEvaluator(MatcherRegistry? matcherRegistry = null)
+    /// <summary>
+    /// Initialises a new instance of <see cref="RuleSetEvaluator"/>.
+    /// </summary>
+    /// <param name="matcherRegistry">
+    /// The registry of condition matchers to use.  When <c>null</c> the default set of
+    /// built-in matchers is used.
+    /// </param>
+    /// <param name="logger">
+    /// Optional logger.  When <c>null</c> a no-op logger is used so that logging never
+    /// affects execution when the hosting application has not configured a provider.
+    /// </param>
+    public RuleSetEvaluator(MatcherRegistry? matcherRegistry = null, ILogger<RuleSetEvaluator>? logger = null)
     {
         _matcherRegistry = matcherRegistry ?? MatcherRegistry.CreateDefault();
+        _logger = logger ?? NullLogger<RuleSetEvaluator>.Instance;
     }
 
+    /// <summary>
+    /// Evaluates <paramref name="ruleSet"/> against <paramref name="context"/> and returns the
+    /// first matching rule, or a non-match / error result.  Emits an <c>ruleeval.evaluate</c>
+    /// Activity span and updates the <c>ruleeval.evaluate.total</c> / <c>ruleeval.evaluate.duration</c>
+    /// metrics.
+    /// </summary>
     public EvaluationResult EvaluateFirst(RuleSet ruleSet, EvaluationContext context, EvaluationOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(ruleSet);
         ArgumentNullException.ThrowIfNull(context);
 
+        using var activity = RuleEvalTelemetry.ActivitySource.StartActivity("ruleeval.evaluate");
+        activity?.SetTag("rule.key", ruleSet.Key);
+
+        _logger.LogDebug("Starting evaluation of rule set '{RuleSetKey}'", ruleSet.Key);
+
+        // This Stopwatch measures the total wall-clock time reported to metrics and ILogger.
+        // EvaluateFirstCore uses its own internal Stopwatch solely for populating RuleTrace
+        // (the optional diagnostics capture), which has a different lifetime and purpose.
+        var stopwatch = Stopwatch.StartNew();
+        EvaluationResult result;
+        try
+        {
+            result = EvaluateFirstCore(ruleSet, context, options);
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("error.type", ex.GetType().Name);
+            _logger.LogError(ex, "Evaluation of rule set '{RuleSetKey}' failed unexpectedly", ruleSet.Key);
+            throw;
+        }
+
+        stopwatch.Stop();
+        var elapsedMs = stopwatch.Elapsed.TotalMilliseconds;
+
+        activity?.SetTag("rule.status", result.Status.ToString());
+        if (result.Status == EvaluationStatus.Matched && result.Match?.PrimaryKey is { } pk)
+        {
+            activity?.SetTag("rule.primary_key", pk.Value?.ToString());
+        }
+
+        RuleEvalTelemetry.EvaluateTotalCounter.Add(1);
+        RuleEvalTelemetry.EvaluateDurationHistogram.Record(elapsedMs);
+
+        LogEvaluationResult(ruleSet.Key, result, elapsedMs);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Evaluates <paramref name="ruleSet"/> against <paramref name="context"/> and returns all
+    /// matching rules.  Emits an <c>ruleeval.evaluate</c> Activity span and updates the
+    /// <c>ruleeval.evaluate.total</c> / <c>ruleeval.evaluate.duration</c> metrics.
+    /// </summary>
+    public EvaluationMatchesResult EvaluateAll(RuleSet ruleSet, EvaluationContext context, EvaluationOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(ruleSet);
+        ArgumentNullException.ThrowIfNull(context);
+
+        using var activity = RuleEvalTelemetry.ActivitySource.StartActivity("ruleeval.evaluate");
+        activity?.SetTag("rule.key", ruleSet.Key);
+
+        _logger.LogDebug("Starting EvaluateAll for rule set '{RuleSetKey}'", ruleSet.Key);
+
+        // See EvaluateFirst for explanation of the two-Stopwatch pattern.
+        var stopwatch = Stopwatch.StartNew();
+        EvaluationMatchesResult result;
+        try
+        {
+            result = EvaluateAllCore(ruleSet, context, options);
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("error.type", ex.GetType().Name);
+            _logger.LogError(ex, "EvaluateAll for rule set '{RuleSetKey}' failed unexpectedly", ruleSet.Key);
+            throw;
+        }
+
+        stopwatch.Stop();
+        var elapsedMs = stopwatch.Elapsed.TotalMilliseconds;
+
+        activity?.SetTag("rule.match.count", result.Matches.Length);
+
+        RuleEvalTelemetry.EvaluateTotalCounter.Add(1);
+        RuleEvalTelemetry.EvaluateDurationHistogram.Record(elapsedMs);
+
+        _logger.LogDebug(
+            "EvaluateAll of '{RuleSetKey}' completed in {ElapsedMs:F2}ms — {MatchCount} match(es)",
+            ruleSet.Key, elapsedMs, result.Matches.Length);
+
+        return result;
+    }
+
+    public bool TryGetFirstOutput(RuleSet ruleSet, EvaluationContext context, string outputName, out object? rawValue, EvaluationOptions? options = null)
+    {
+        var result = EvaluateFirst(ruleSet, context, options);
+        if (result.Status == EvaluationStatus.Matched && result.Match is not null)
+        {
+            var output = result.Match.Outputs.FirstOrDefault(output => string.Equals(output.Name, outputName, StringComparison.OrdinalIgnoreCase));
+            if (output is not null)
+            {
+                rawValue = output.RawValue;
+                return true;
+            }
+        }
+
+        rawValue = null;
+        return false;
+    }
+
+    // ── Logging helper ───────────────────────────────────────────────────────
+
+    private void LogEvaluationResult(string ruleSetKey, EvaluationResult result, double elapsedMs)
+    {
+        switch (result.Status)
+        {
+            case EvaluationStatus.Matched:
+                _logger.LogDebug(
+                    "Evaluation of '{RuleSetKey}' → Matched (rule index {RuleIndex}, primary key {PrimaryKey}) in {ElapsedMs:F2}ms",
+                    ruleSetKey,
+                    result.Match?.RuleIndex,
+                    result.Match?.PrimaryKey?.Value,
+                    elapsedMs);
+                break;
+
+            case EvaluationStatus.NoMatch:
+                _logger.LogDebug(
+                    "Evaluation of '{RuleSetKey}' → NoMatch (reason: {Reason}) in {ElapsedMs:F2}ms",
+                    ruleSetKey, result.NoMatchReason, elapsedMs);
+                break;
+
+            case EvaluationStatus.AmbiguousMatch:
+                _logger.LogWarning(
+                    "Evaluation of '{RuleSetKey}' → AmbiguousMatch ({MatchCount} rules matched) in {ElapsedMs:F2}ms",
+                    ruleSetKey,
+                    (result.AmbiguousMatch?.AdditionalMatches.Length ?? 0) + 1,
+                    elapsedMs);
+                break;
+
+            case EvaluationStatus.InvalidInput:
+                _logger.LogWarning(
+                    "Evaluation of '{RuleSetKey}' → InvalidInput (reason: {Reason}, error: {Error}) in {ElapsedMs:F2}ms",
+                    ruleSetKey, result.NoMatchReason, result.Error, elapsedMs);
+                break;
+        }
+    }
+
+    // ── Core evaluation logic (no telemetry) ─────────────────────────────────
+
+    private EvaluationResult EvaluateFirstCore(RuleSet ruleSet, EvaluationContext context, EvaluationOptions? options)
+    {
         var evaluationOptions = options ?? EvaluationOptions.Default;
         var stopwatch = Stopwatch.StartNew();
         var traceEntries = evaluationOptions.CaptureDiagnostics ? new List<RuleTraceEntry>(ruleSet.Rules.Length) : null;
@@ -341,11 +504,8 @@ public sealed class RuleSetEvaluator
             BuildTrace(ruleSet, stopwatch, traceEntries, $"Ambiguous match: {matches.Count} rules matched."));
     }
 
-    public EvaluationMatchesResult EvaluateAll(RuleSet ruleSet, EvaluationContext context, EvaluationOptions? options = null)
+    private EvaluationMatchesResult EvaluateAllCore(RuleSet ruleSet, EvaluationContext context, EvaluationOptions? options)
     {
-        ArgumentNullException.ThrowIfNull(ruleSet);
-        ArgumentNullException.ThrowIfNull(context);
-
         var evaluationOptions = options ?? EvaluationOptions.Default;
         var stopwatch = Stopwatch.StartNew();
         var traceEntries = evaluationOptions.CaptureDiagnostics ? new List<RuleTraceEntry>(ruleSet.Rules.Length) : null;
@@ -389,22 +549,7 @@ public sealed class RuleSetEvaluator
         return new EvaluationMatchesResult(matches.ToImmutable(), BuildTrace(ruleSet, stopwatch, traceEntries, $"Found {matches.Count} matching rules."));
     }
 
-    public bool TryGetFirstOutput(RuleSet ruleSet, EvaluationContext context, string outputName, out object? rawValue, EvaluationOptions? options = null)
-    {
-        var result = EvaluateFirst(ruleSet, context, options);
-        if (result.Status == EvaluationStatus.Matched && result.Match is not null)
-        {
-            var output = result.Match.Outputs.FirstOrDefault(output => string.Equals(output.Name, outputName, StringComparison.OrdinalIgnoreCase));
-            if (output is not null)
-            {
-                rawValue = output.RawValue;
-                return true;
-            }
-        }
-
-        rawValue = null;
-        return false;
-    }
+    // ── Static helpers ────────────────────────────────────────────────────────
 
     private static bool TryResolveInputs(RuleSet ruleSet, EvaluationContext context, out object?[] actualInputs, out string? error)
     {

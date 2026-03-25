@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using RuleEval.Caching;
 using RuleEval.Core;
 using RuleEval.Database;
@@ -77,7 +78,8 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IRuleSetCache>(),
             sp.GetRequiredService<DbRuleSetMapper>(),
             sp.GetRequiredService<RuleSetEvaluator>(),
-            defaultCacheTtl: options.DefaultCacheTtl));
+            defaultCacheTtl: options.DefaultCacheTtl,
+            logger: sp.GetService<ILogger<RuleSetRepository>>()));
 
         return services;
     }

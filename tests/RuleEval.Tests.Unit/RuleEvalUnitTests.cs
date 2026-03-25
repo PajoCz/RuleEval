@@ -1,5 +1,8 @@
 using Xunit;
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using Microsoft.Extensions.Logging.Abstractions;
 using RuleEval.Abstractions;
 using RuleEval.Caching;
 using RuleEval.Core;
@@ -468,6 +471,147 @@ public sealed class RuleEvalUnitTests
 
         Assert.Throws<InvalidOperationException>(() => RelationalSourceMappingTestAccessor.MapRows(rows));
     }
+    // ── Observability tests ───────────────────────────────────────────────────
+
+    [Fact]
+    public void EvaluateFirst_WithNullLogger_DoesNotAffectResult()
+    {
+        var evaluator = new RuleSetEvaluator(logger: NullLogger<RuleSetEvaluator>.Instance);
+        var result = evaluator.EvaluateFirst(CreateSampleRuleSet(), EvaluationContext.FromPositional("7BN Perspektiva Důchod", 15m));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+    }
+
+    [Fact]
+    public void EvaluateFirst_EmitsActivitySpan_WhenListenerAttached()
+    {
+        var started = new List<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RuleEvalTelemetry.ServiceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStarted = a => started.Add(a),
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var evaluator = new RuleSetEvaluator();
+        var result = evaluator.EvaluateFirst(CreateSampleRuleSet(), EvaluationContext.FromPositional("7BN Perspektiva Důchod", 15m));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+        Assert.Contains(started, a => a.OperationName == "ruleeval.evaluate");
+    }
+
+    [Fact]
+    public void EvaluateFirst_ActivitySpan_HasRuleKeyTag()
+    {
+        Activity? capturedActivity = null;
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RuleEvalTelemetry.ServiceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = a =>
+            {
+                if (a.OperationName == "ruleeval.evaluate")
+                    capturedActivity = a;
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var evaluator = new RuleSetEvaluator();
+        evaluator.EvaluateFirst(CreateSampleRuleSet(), EvaluationContext.FromPositional("7BN Perspektiva Důchod", 15m));
+
+        Assert.NotNull(capturedActivity);
+        Assert.Equal("pricing", capturedActivity!.GetTagItem("rule.key"));
+        Assert.Equal("Matched", capturedActivity.GetTagItem("rule.status"));
+    }
+
+    [Fact]
+    public void EvaluateFirst_RecordsMetrics_WhenMeterListenerAttached()
+    {
+        var measurements = new List<(string Name, double Value)>();
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name == RuleEvalTelemetry.ServiceName)
+                listener.EnableMeasurementEvents(instrument);
+        };
+        meterListener.SetMeasurementEventCallback<double>((instrument, value, _, _) =>
+            measurements.Add((instrument.Name, value)));
+        meterListener.SetMeasurementEventCallback<long>((instrument, value, _, _) =>
+            measurements.Add((instrument.Name, (double)value)));
+        meterListener.Start();
+
+        var evaluator = new RuleSetEvaluator();
+        evaluator.EvaluateFirst(CreateSampleRuleSet(), EvaluationContext.FromPositional("7BN Perspektiva Důchod", 15m));
+        meterListener.RecordObservableInstruments();
+
+        Assert.Contains(measurements, m => m.Name == "ruleeval.evaluate.total");
+        Assert.Contains(measurements, m => m.Name == "ruleeval.evaluate.duration");
+    }
+
+    [Fact]
+    public void EvaluateFirst_BusinessResult_UnaffectedByInstrumentation()
+    {
+        // Verify that adding telemetry listener does not change evaluation outcome
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == RuleEvalTelemetry.ServiceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        var evaluator = new RuleSetEvaluator();
+
+        var matched = evaluator.EvaluateFirst(CreateSampleRuleSet(), EvaluationContext.FromPositional("7BN Perspektiva Důchod", 15m));
+        var noMatch = evaluator.EvaluateFirst(CreateSampleRuleSet(), EvaluationContext.FromPositional("Unknown", 200m)); // 200 is above the maximum age 120 in both rules
+        var invalidInput = evaluator.EvaluateFirst(CreateSampleRuleSet(), EvaluationContext.FromPositional("only-one"));
+
+        Assert.Equal(EvaluationStatus.Matched, matched.Status);
+        Assert.Equal(EvaluationStatus.NoMatch, noMatch.Status);
+        Assert.Equal(EvaluationStatus.InvalidInput, invalidInput.Status);
+    }
+
+    [Fact]
+    public async Task Repository_CacheHitMissMetrics_AreRecorded()
+    {
+        var measurements = new ConcurrentDictionary<string, long>();
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name == RuleEvalTelemetry.ServiceName &&
+                (instrument.Name == "ruleeval.cache.hit" || instrument.Name == "ruleeval.cache.miss"))
+                listener.EnableMeasurementEvents(instrument);
+        };
+        meterListener.SetMeasurementEventCallback<long>((instrument, value, _, _) =>
+            measurements.AddOrUpdate(instrument.Name, value, (_, existing) => existing + value));
+        meterListener.Start();
+
+        var source = new CountingRuleSetSource(CreateDbDefinition());
+        var cache = new MemoryRuleSetCache();
+        var repository = new RuleSetRepository(source, cache);
+
+        _ = await repository.LoadAsync("pricing", TimeSpan.FromMinutes(5)); // miss then store
+        _ = await repository.LoadAsync("pricing", TimeSpan.FromMinutes(5)); // hit
+
+        meterListener.RecordObservableInstruments();
+
+        Assert.True(measurements.GetValueOrDefault("ruleeval.cache.miss") >= 1);
+        Assert.True(measurements.GetValueOrDefault("ruleeval.cache.hit") >= 1);
+    }
+
+    [Fact]
+    public async Task MemoryRuleSetCache_WithNullLogger_DoesNotThrow()
+    {
+        var cache = new MemoryRuleSetCache(NullLogger<MemoryRuleSetCache>.Instance);
+        var key = new RuleSetCacheKey("ns", "test");
+
+        await cache.SetAsync(key, CreateSampleRuleSet());
+        var result = await cache.GetAsync(key);
+        await cache.RemoveAsync(key);
+
+        Assert.NotNull(result);
+    }
+
     private sealed class CountingRuleSetSource : IRuleSetSource
     {
         private readonly DbRuleSetDefinition _definition;
