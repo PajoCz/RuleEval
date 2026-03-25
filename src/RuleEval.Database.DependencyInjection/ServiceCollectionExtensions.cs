@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using RuleEval.Auditing;
 using RuleEval.Caching;
 using RuleEval.Core;
 using RuleEval.Database;
@@ -80,6 +82,74 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<RuleSetEvaluator>(),
             defaultCacheTtl: options.DefaultCacheTtl,
             logger: sp.GetService<ILogger<RuleSetRepository>>()));
+
+        return services;
+    }
+
+    /// <summary>
+    /// Activates the business/audit observability layer for RuleEval.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this method <b>after</b> <see cref="AddRuleEvalDatabase{TSource}"/> so that the
+    /// <see cref="IRuleSetRepository"/> registration already exists to be decorated.
+    /// An <see cref="InvalidOperationException"/> is thrown at registration time if
+    /// <see cref="IRuleSetRepository"/> has not been registered yet.
+    /// </para>
+    /// <para>
+    /// This method:
+    /// <list type="bullet">
+    ///   <item>Registers <see cref="IRuleSearchContextAccessor"/> as <see cref="AsyncLocalRuleSearchContextAccessor"/> (singleton, <c>TryAdd</c> — replaceable).</item>
+    ///   <item>Wraps the existing <see cref="IRuleSetRepository"/> in an <see cref="AuditingRuleSetRepository"/> decorator that notifies all registered <see cref="IRuleEvaluationAuditSink"/> implementations.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Register custom sinks before or after this call:
+    /// <code>
+    /// services.AddSingleton&lt;IRuleEvaluationAuditSink, MyAuditSink&gt;();
+    /// </code>
+    /// If no sink is registered, evaluation behaves identically to a non-audited repository.
+    /// </para>
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The same <see cref="IServiceCollection"/> for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="IRuleSetRepository"/> is not registered.
+    /// Ensure <see cref="AddRuleEvalDatabase{TSource}"/> is called first.
+    /// </exception>
+    public static IServiceCollection AddRuleEvalAuditing(this IServiceCollection services)
+    {
+        // Register the AsyncLocal-based context accessor.
+        // TryAdd allows the hosting app to substitute a custom implementation.
+        services.TryAddSingleton<IRuleSearchContextAccessor, AsyncLocalRuleSearchContextAccessor>();
+
+        // Decorate the registered IRuleSetRepository with the auditing wrapper.
+        var innerDescriptor = services.LastOrDefault(d => d.ServiceType == typeof(IRuleSetRepository));
+        if (innerDescriptor is null)
+            throw new InvalidOperationException(
+                $"{nameof(AddRuleEvalAuditing)} requires {nameof(IRuleSetRepository)} to already be registered. " +
+                $"Call AddRuleEvalDatabase(...) before calling {nameof(AddRuleEvalAuditing)}.");
+
+        services.Remove(innerDescriptor);
+
+        services.Add(ServiceDescriptor.Describe(
+            typeof(IRuleSetRepository),
+            sp =>
+            {
+                var inner = innerDescriptor switch
+                {
+                    { ImplementationInstance: not null } => (IRuleSetRepository)innerDescriptor.ImplementationInstance,
+                    { ImplementationFactory: not null } => (IRuleSetRepository)innerDescriptor.ImplementationFactory(sp),
+                    { ImplementationType: not null } => (IRuleSetRepository)ActivatorUtilities.CreateInstance(sp, innerDescriptor.ImplementationType),
+                    _ => throw new InvalidOperationException("Cannot determine how to create the inner IRuleSetRepository."),
+                };
+
+                return new AuditingRuleSetRepository(
+                    inner,
+                    sp.GetRequiredService<IRuleSearchContextAccessor>(),
+                    sp.GetServices<IRuleEvaluationAuditSink>());
+            },
+            innerDescriptor.Lifetime));
 
         return services;
     }
