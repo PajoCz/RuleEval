@@ -93,6 +93,8 @@ public static class ServiceCollectionExtensions
     /// <para>
     /// Call this method <b>after</b> <see cref="AddRuleEvalDatabase{TSource}"/> so that the
     /// <see cref="IRuleSetRepository"/> registration already exists to be decorated.
+    /// An <see cref="InvalidOperationException"/> is thrown at registration time if
+    /// <see cref="IRuleSetRepository"/> has not been registered yet.
     /// </para>
     /// <para>
     /// This method:
@@ -111,6 +113,10 @@ public static class ServiceCollectionExtensions
     /// </remarks>
     /// <param name="services">The service collection.</param>
     /// <returns>The same <see cref="IServiceCollection"/> for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <see cref="IRuleSetRepository"/> is not registered.
+    /// Ensure <see cref="AddRuleEvalDatabase{TSource}"/> is called first.
+    /// </exception>
     public static IServiceCollection AddRuleEvalAuditing(this IServiceCollection services)
     {
         // Register the AsyncLocal-based context accessor.
@@ -120,7 +126,9 @@ public static class ServiceCollectionExtensions
         // Decorate the registered IRuleSetRepository with the auditing wrapper.
         var innerDescriptor = services.LastOrDefault(d => d.ServiceType == typeof(IRuleSetRepository));
         if (innerDescriptor is null)
-            return services;
+            throw new InvalidOperationException(
+                $"{nameof(AddRuleEvalAuditing)} requires {nameof(IRuleSetRepository)} to already be registered. " +
+                $"Call AddRuleEvalDatabase(...) before calling {nameof(AddRuleEvalAuditing)}.");
 
         services.Remove(innerDescriptor);
 
