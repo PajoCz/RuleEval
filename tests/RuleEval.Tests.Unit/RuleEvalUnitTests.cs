@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging.Abstractions;
 using RuleEval.Abstractions;
+using RuleEval.Auditing;
 using RuleEval.Caching;
 using RuleEval.Core;
 using RuleEval.Diagnostics;
@@ -610,6 +611,241 @@ public sealed class RuleEvalUnitTests
         await cache.RemoveAsync(key);
 
         Assert.NotNull(result);
+    }
+
+    // ── Business audit observability tests ───────────────────────────────────
+
+    [Fact]
+    public async Task AuditingRepository_SinkReceivesEvent_OnMatch()
+    {
+        var events = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var sink = new CapturingAuditSink(events);
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [sink]);
+
+        var result = await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional(".*Perspektiva.*", "20"));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+        Assert.Single(events);
+        var ev = events.Single();
+        Assert.Equal("pricing", ev.RuleSetKey);
+        Assert.Equal(EvaluationStatus.Matched, ev.Status);
+        Assert.NotEmpty(ev.Outputs);
+        Assert.False(ev.IsError);
+        Assert.Null(ev.ErrorType);
+        Assert.True(ev.Elapsed >= TimeSpan.Zero);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_SinkReceivesEvent_OnNoMatch()
+    {
+        var events = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var sink = new CapturingAuditSink(events);
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [sink]);
+
+        var result = await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional("Unknown", "999"));
+
+        Assert.Equal(EvaluationStatus.NoMatch, result.Status);
+        Assert.Single(events);
+        var ev = events.Single();
+        Assert.Equal(EvaluationStatus.NoMatch, ev.Status);
+        Assert.Empty(ev.Outputs);
+        Assert.False(ev.IsError);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_SinkReceivesEvent_OnInvalidInput()
+    {
+        var events = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var sink = new CapturingAuditSink(events);
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [sink]);
+
+        var result = await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional("only-one-input"));
+
+        Assert.Equal(EvaluationStatus.InvalidInput, result.Status);
+        Assert.Single(events);
+        var ev = events.Single();
+        Assert.Equal(EvaluationStatus.InvalidInput, ev.Status);
+        Assert.False(ev.IsError);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_SinkReceivesErrorEvent_WhenSourceThrows()
+    {
+        var events = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var sink = new CapturingAuditSink(events);
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new ThrowingRuleSetSource());
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [sink]);
+
+        await Assert.ThrowsAsync<DatabaseLoadException>(async () =>
+            await repo.EvaluateFirstAsync("pricing", EvaluationContext.FromPositional("x", "1")));
+
+        Assert.Single(events);
+        var ev = events.Single();
+        Assert.True(ev.IsError);
+        Assert.NotNull(ev.ErrorType);
+        Assert.NotNull(ev.ErrorMessage);
+        Assert.Null(ev.Status);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_BusinessContextIsForwarded()
+    {
+        var events = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var sink = new CapturingAuditSink(events);
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        contextAccessor.Current = new RuleSearchContext
+        {
+            OperationName = "TestOperation",
+            CorrelationId = "corr-123",
+            UserId = "user-1",
+            Tags = new Dictionary<string, string?> { ["customerId"] = "C99" },
+        };
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [sink]);
+
+        await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional(".*Perspektiva.*", "20"));
+
+        var ev = events.Single();
+        Assert.NotNull(ev.BusinessContext);
+        Assert.Equal("TestOperation", ev.BusinessContext!.OperationName);
+        Assert.Equal("corr-123", ev.BusinessContext.CorrelationId);
+        Assert.Equal("user-1", ev.BusinessContext.UserId);
+        Assert.Equal("C99", ev.BusinessContext.Tags["customerId"]);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_PrimaryKeyIsForwarded_OnMatch()
+    {
+        var events = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var sink = new CapturingAuditSink(events);
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [sink]);
+
+        await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional(".*Perspektiva.*", "20"));
+
+        var ev = events.Single();
+        Assert.Equal(EvaluationStatus.Matched, ev.Status);
+        Assert.NotNull(ev.PrimaryKey);
+        Assert.Equal("DataId", ev.PrimaryKey!.Name);
+        Assert.Equal(1, Convert.ToInt32(ev.PrimaryKey.Value));
+    }
+
+    [Fact]
+    public async Task AuditingRepository_BusinessResultUnchanged_WithAuditLayer()
+    {
+        // Regression: auditing must not alter the returned EvaluationResult.
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [new CapturingAuditSink(new ConcurrentQueue<RuleEvaluationAuditEvent>())]);
+
+        var matched = await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional(".*Perspektiva.*", "20"));
+        var noMatch = await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional("Unknown", "999"));
+        var invalid = await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional("only-one"));
+
+        Assert.Equal(EvaluationStatus.Matched, matched.Status);
+        Assert.Equal(EvaluationStatus.NoMatch, noMatch.Status);
+        Assert.Equal(EvaluationStatus.InvalidInput, invalid.Status);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_WorksWithNoSinksRegistered()
+    {
+        // Auditing layer must be safe when no sinks are registered.
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, []);
+
+        var result = await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional(".*Perspektiva.*", "20"));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_GetFirstOutputAsync_FiresAuditEvent()
+    {
+        var events = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var sink = new CapturingAuditSink(events);
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [sink]);
+
+        var output = await repo.GetFirstOutputAsync("pricing",
+            EvaluationContext.FromPositional(".*Perspektiva.*", "20"), "formula");
+
+        Assert.NotNull(output);
+        Assert.Single(events);
+        Assert.Equal(EvaluationStatus.Matched, events.Single().Status);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_InputsAreForwarded()
+    {
+        var events = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var sink = new CapturingAuditSink(events);
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(inner, contextAccessor, [sink]);
+
+        var ctx = EvaluationContext.FromPositional(".*Perspektiva.*", "20");
+        await repo.EvaluateFirstAsync("pricing", ctx);
+
+        var ev = events.Single();
+        Assert.Equal(ctx.PositionalInputs, ev.Inputs.PositionalInputs);
+    }
+
+    [Fact]
+    public async Task AuditingRepository_MultipleSinksAllReceiveEvents()
+    {
+        var events1 = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var events2 = new ConcurrentQueue<RuleEvaluationAuditEvent>();
+        var contextAccessor = new AsyncLocalRuleSearchContextAccessor();
+        var inner = new RuleSetRepository(new CountingRuleSetSource(CreateDbDefinition()));
+        var repo = new AuditingRuleSetRepository(
+            inner, contextAccessor,
+            [new CapturingAuditSink(events1), new CapturingAuditSink(events2)]);
+
+        await repo.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromPositional(".*Perspektiva.*", "20"));
+
+        Assert.Single(events1);
+        Assert.Single(events2);
+    }
+
+    private sealed class CapturingAuditSink : IRuleEvaluationAuditSink
+    {
+        private readonly ConcurrentQueue<RuleEvaluationAuditEvent> _events;
+
+        public CapturingAuditSink(ConcurrentQueue<RuleEvaluationAuditEvent> events)
+            => _events = events;
+
+        public ValueTask OnEvaluatedAsync(RuleEvaluationAuditEvent auditEvent, CancellationToken cancellationToken = default)
+        {
+            _events.Enqueue(auditEvent);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingRuleSetSource : IRuleSetSource
+    {
+        public ValueTask<DbRuleSetDefinition> LoadAsync(string key, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("Simulated source failure.");
     }
 
     private sealed class CountingRuleSetSource : IRuleSetSource
