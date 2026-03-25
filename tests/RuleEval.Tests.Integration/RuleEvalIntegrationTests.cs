@@ -19,7 +19,7 @@ public sealed class RuleEvalIntegrationTests
         Assert.Equal("pricing", ruleSet.Key);
         Assert.Equal(2, ruleSet.InputFields.Length);
         Assert.Equal("formula", ruleSet.Rules[0].Outputs[0].Name);
-        Assert.Equal("id", ruleSet.Rules[0].PrimaryKey?.Name);
+        Assert.Equal("DataId", ruleSet.Rules[0].PrimaryKey?.Name);
     }
 
     [Fact]
@@ -71,28 +71,79 @@ public sealed class RuleEvalIntegrationTests
     public void Mapper_Throws_ForInvalidMetadata()
     {
         var mapper = new DbRuleSetMapper();
-        var definition = new DbRuleSetDefinition("broken", [], [new RuleSetRowData(new Dictionary<string, object?>())]);
+        var definition = new DbRuleSetDefinition("broken", [], [new RuleSetRowData(null, new Dictionary<string, object?>())]);
 
         Assert.Throws<InvalidRuleDefinitionException>(() => mapper.Map(definition));
+    }
+
+    [Fact]
+    public async Task SqlServerSource_PrimaryKeyFromFirstDataColumn()
+    {
+        var executor = new FakeExecutor();
+        var source = new SqlServerRuleSetSource(executor, "Server=.;Database=RuleEval;", "dbo.GetColumns", "dbo.GetRows");
+
+        var definition = await source.LoadAsync("pricing");
+
+        Assert.All(definition.Rows, row => Assert.Equal("TranslatorDataId", row.PrimaryKey?.Name));
+        Assert.Equal(42, definition.Rows[0].PrimaryKey?.Value);
+    }
+
+    [Fact]
+    public async Task SqlServerSource_NoSchemaDefinedPrimaryKey_MetadataOnlyHasInputsAndOutputs()
+    {
+        var executor = new FakeExecutor();
+        var source = new SqlServerRuleSetSource(executor, "Server=.;Database=RuleEval;", "dbo.GetColumns", "dbo.GetRows");
+
+        var definition = await source.LoadAsync("pricing");
+
+        Assert.DoesNotContain(definition.Columns, col => col.Role != RuleFieldRole.Input && col.Role != RuleFieldRole.Output);
+    }
+
+    [Fact]
+    public async Task SqlServerSource_PrimaryKey_DoesNotAffectMatchingBehavior()
+    {
+        var executor = new FakeExecutor();
+        var source = new SqlServerRuleSetSource(executor, "Server=.;Database=RuleEval;", "dbo.GetColumns", "dbo.GetRows");
+        var repository = new RuleSetRepository(source, new NoCacheRuleSetCache());
+
+        // Matching succeeds based on Col01/Col02 patterns — PK value (42) plays no role
+        var result = await repository.EvaluateFirstAsync("pricing", EvaluationContext.FromPositional("7BN Perspektiva Důchod", 15m));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+        Assert.Equal("TranslatorDataId", result.Match?.PrimaryKey?.Name);
+        Assert.Equal(42, result.Match?.PrimaryKey?.Value);
+    }
+
+    [Fact]
+    public async Task SqlServerSource_NamedEvaluation_UsesCodes()
+    {
+        var executor = new FakeExecutor();
+        var source = new SqlServerRuleSetSource(executor, "Server=.;Database=RuleEval;", "dbo.GetColumns", "dbo.GetRows");
+        var repository = new RuleSetRepository(source, new NoCacheRuleSetCache());
+
+        var result = await repository.EvaluateFirstAsync("pricing",
+            EvaluationContext.FromNamed(new Dictionary<string, object?> { ["segment"] = "7BN Perspektiva Důchod", ["age"] = 15m }));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
     }
 
     private static DbRuleSetDefinition CreateDefinition()
         => new(
             "pricing",
             [
-                new RuleSetColumnDefinition("segment", 0, RuleFieldRole.Input, "segment", DefaultMatcherKeys.Regex),
-                new RuleSetColumnDefinition("age", 1, RuleFieldRole.Input, "age", DefaultMatcherKeys.DecimalInterval),
-                new RuleSetColumnDefinition("formula", 2, RuleFieldRole.Output, "formula"),
-                new RuleSetColumnDefinition("id", 3, RuleFieldRole.PrimaryKey, "id"),
+                new RuleSetColumnDefinition("segment", 1, RuleFieldRole.Input, 1),
+                new RuleSetColumnDefinition("age", 2, RuleFieldRole.Input, 2),
+                new RuleSetColumnDefinition("formula", 3, RuleFieldRole.Output, 3),
             ],
             [
-                new RuleSetRowData(new Dictionary<string, object?>
-                {
-                    ["segment"] = ".*Perspektiva.*",
-                    ["age"] = "INTERVAL<15;24>",
-                    ["formula"] = "C2/240",
-                    ["id"] = 1,
-                }),
+                new RuleSetRowData(
+                    new PrimaryKeyValue("DataId", 1),
+                    new Dictionary<string, object?>
+                    {
+                        ["Col01"] = ".*Perspektiva.*",
+                        ["Col02"] = "INTERVAL<15;24>",
+                        ["Col03"] = "C2/240",
+                    }),
             ]);
 
     private sealed class StubSource : IRuleSetSource
@@ -121,37 +172,24 @@ public sealed class RuleEvalIntegrationTests
                 [
                     new Dictionary<string, object?>
                     {
-                        ["Name"] = "segment",
+                        ["Code"] = "segment",
                         ["ColNr"] = 1,
                         ["Order"] = 1,
-                        ["Type"] = 1,
-                        ["FieldName"] = "segment",
-                        ["MatcherKey"] = DefaultMatcherKeys.Regex,
+                        ["Type"] = 0,
                     },
                     new Dictionary<string, object?>
                     {
-                        ["Name"] = "age",
+                        ["Code"] = "age",
                         ["ColNr"] = 2,
                         ["Order"] = 2,
-                        ["Type"] = 1,
-                        ["FieldName"] = "age",
-                        ["MatcherKey"] = DefaultMatcherKeys.DecimalInterval,
+                        ["Type"] = 0,
                     },
                     new Dictionary<string, object?>
                     {
-                        ["Name"] = "formula",
+                        ["Code"] = "formula",
                         ["ColNr"] = 3,
                         ["Order"] = 3,
-                        ["Type"] = 2,
-                        ["FieldName"] = "formula",
-                    },
-                    new Dictionary<string, object?>
-                    {
-                        ["Name"] = "id",
-                        ["ColNr"] = 4,
-                        ["Order"] = 4,
-                        ["Type"] = 3,
-                        ["FieldName"] = "id",
+                        ["Type"] = 1,
                     },
                 ]);
             }
@@ -160,10 +198,10 @@ public sealed class RuleEvalIntegrationTests
             [
                 new Dictionary<string, object?>
                 {
+                    ["TranslatorDataId"] = 42,
                     ["Col01"] = ".*Perspektiva.*",
                     ["Col02"] = "INTERVAL<15;24>",
                     ["Col03"] = "C2/240",
-                    ["Col04"] = 1,
                 },
             ]);
         }

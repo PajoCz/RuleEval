@@ -6,7 +6,6 @@ public enum RuleFieldRole
 {
     Input = 0,
     Output = 1,
-    PrimaryKey = 2,
 }
 
 public enum EvaluationStatus

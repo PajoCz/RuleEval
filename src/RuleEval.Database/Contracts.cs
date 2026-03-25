@@ -3,14 +3,14 @@ using RuleEval.Abstractions;
 namespace RuleEval.Database.Abstractions;
 
 public sealed record RuleSetColumnDefinition(
-    string ColumnName,
-    int ColumnOrder,
+    string Code,
+    int Order,
     RuleFieldRole Role,
-    string? FieldName = null,
-    string? MatcherKey = null,
-    int? SourceColumnNumber = null);
+    int ColNr);
 
-public sealed record RuleSetRowData(IReadOnlyDictionary<string, object?> Values);
+public sealed record RuleSetRowData(
+    PrimaryKeyValue? PrimaryKey,
+    IReadOnlyDictionary<string, object?> ColValues);
 
 public sealed record DbRuleSetDefinition(
     string Key,
@@ -35,3 +35,4 @@ public interface IRuleSetRepository
     ValueTask<string?> GetFirstOutputAsync(string key, EvaluationContext context, EvaluationOptions? options = null, CancellationToken cancellationToken = default);
     ValueTask<string> GetFirstOutputOrThrowAsync(string key, EvaluationContext context, EvaluationOptions? options = null, CancellationToken cancellationToken = default);
 }
+
