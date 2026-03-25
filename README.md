@@ -215,6 +215,7 @@ await repository.InvalidateCacheAsync(key);
 | Dokument | Obsah |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Architektura, design rozhodnutí, závislosti mezi vrstvami, evaluační flow |
+| [docs/observability.md](docs/observability.md) | Technická observability: `ILogger`, `ActivitySource` (OpenTelemetry), `Meter` (metriky) |
 | [docs/nuget-packages.md](docs/nuget-packages.md) | Přehled balíčků, typické instalační scénáře, dependency graph |
 | [docs/publishing-nuget.md](docs/publishing-nuget.md) | Jak verzovat, zabalit a publikovat NuGet balíčky |
 | [samples/RuleEval.Samples](samples/RuleEval.Samples/Program.cs) | Kompletní ukázky použití včetně DI, cache a DB vrstvy |
