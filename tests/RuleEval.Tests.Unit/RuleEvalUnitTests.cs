@@ -465,12 +465,30 @@ public sealed class RuleEvalUnitTests
     [Fact]
     public void RelationalSourceMapping_MapRows_ThrowsForMultipleNonColXXColumns()
     {
+        // Dva neznámé sloupce (DataId + OtherId) — ani jeden není ColXX ani rezervované metadata → výjimka
         var rows = new List<IReadOnlyDictionary<string, object?>>
         {
-            new Dictionary<string, object?> { ["DataId"] = 1, ["SchemaCode"] = "x", ["Col01"] = "A" },
+            new Dictionary<string, object?> { ["DataId"] = 1, ["OtherId"] = 2, ["Col01"] = "A" },
         };
 
         Assert.Throws<InvalidOperationException>(() => RelationalSourceMappingTestAccessor.MapRows(rows));
+    }
+
+    [Fact]
+    public void RelationalSourceMapping_MapRows_IgnoresMetadataColumns()
+    {
+        // SchemaCode a Order jsou rezervované metadata sloupce — nesmí se považovat za PK
+        var rows = new List<IReadOnlyDictionary<string, object?>>
+        {
+            new Dictionary<string, object?> { ["DataId"] = 42, ["SchemaCode"] = "x", ["Order"] = 10, ["Col01"] = "A" },
+        };
+
+        var result = RelationalSourceMappingTestAccessor.MapRows(rows);
+
+        Assert.Single(result);
+        Assert.Equal("DataId", result[0].PrimaryKey?.Name);
+        Assert.Equal(42, result[0].PrimaryKey?.Value);
+        Assert.Equal(10, result[0].Order);
     }
     // ── Observability tests ───────────────────────────────────────────────────
 
