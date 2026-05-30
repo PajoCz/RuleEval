@@ -36,6 +36,7 @@ CREATE TABLE [RuleEvalTest].[Data]
 (
     TranslatorDataId INT           IDENTITY(1,1) PRIMARY KEY,
     SchemaCode       NVARCHAR(100) NOT NULL,
+    [Order]          INT           NOT NULL DEFAULT 0,
     Col01 NVARCHAR(500) NULL, Col02 NVARCHAR(500) NULL, Col03 NVARCHAR(500) NULL,
     Col04 NVARCHAR(500) NULL, Col05 NVARCHAR(500) NULL, Col06 NVARCHAR(500) NULL,
     Col07 NVARCHAR(500) NULL, Col08 NVARCHAR(500) NULL, Col09 NVARCHAR(500) NULL,
@@ -60,10 +61,10 @@ VALUES
     ('RuleEvalTest_Pricing', 'Formula', 3, 3, 1);
 
 DELETE FROM [RuleEvalTest].[Data] WHERE SchemaCode = 'RuleEvalTest_Pricing';
-INSERT INTO [RuleEvalTest].[Data] (SchemaCode, Col01, Col02, Col03)
+INSERT INTO [RuleEvalTest].[Data] (SchemaCode, [Order], Col01, Col02, Col03)
 VALUES
-    ('RuleEvalTest_Pricing', '.*Perspektiva.*', 'INTERVAL<15;24>', 'C2/240'),
-    ('RuleEvalTest_Pricing', '.*Standard.*',    'INTERVAL<25;65>', 'D3/120');
+    ('RuleEvalTest_Pricing', 10, '.*Perspektiva.*', 'INTERVAL<15;24>', 'C2/240'),
+    ('RuleEvalTest_Pricing', 20, '.*Standard.*',    'INTERVAL<25;65>', 'D3/120');
 GO
 
 -- ---------------------------------------------------------------
@@ -81,10 +82,10 @@ VALUES
     ('RuleEvalTest_OrderVsColNr', 'Result',  3, 3, 1);
 
 DELETE FROM [RuleEvalTest].[Data] WHERE SchemaCode = 'RuleEvalTest_OrderVsColNr';
-INSERT INTO [RuleEvalTest].[Data] (SchemaCode, Col01, Col02, Col03)
+INSERT INTO [RuleEvalTest].[Data] (SchemaCode, [Order], Col01, Col02, Col03)
 VALUES
     --  Col01 = Age pattern,     Col02 = Segment pattern,  Col03 = výstup
-    ('RuleEvalTest_OrderVsColNr', 'INTERVAL<15;24>', '.*Perspektiva.*', 'OK');
+    ('RuleEvalTest_OrderVsColNr', 10, 'INTERVAL<15;24>', '.*Perspektiva.*', 'OK');
 GO
 
 -- ---------------------------------------------------------------
@@ -107,9 +108,10 @@ GO
 CREATE OR ALTER PROCEDURE [RuleEvalTest].[p_GetDataBySchemaCode]
     @Code NVARCHAR(100)
 AS
-    SELECT TranslatorDataId,
+    SELECT TranslatorDataId, [Order],
            Col01, Col02, Col03, Col04, Col05, Col06, Col07, Col08, Col09, Col10,
            Col11, Col12, Col13, Col14, Col15, Col16, Col17, Col18, Col19, Col20
     FROM   [RuleEvalTest].[Data]
-    WHERE  SchemaCode = @Code;
+    WHERE  SchemaCode = @Code
+    ORDER  BY [Order];
 GO

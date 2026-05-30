@@ -59,7 +59,7 @@ public sealed class DbRuleSetMapper
                 }
             }
 
-            rules.Add(RuleEval.Abstractions.Rule.Create(rowIndex, conditions.ToImmutable(), outputs.ToImmutable(), row.PrimaryKey));
+            rules.Add(RuleEval.Abstractions.Rule.Create(row.Order, conditions.ToImmutable(), outputs.ToImmutable(), row.PrimaryKey));
         }
 
         return RuleSet.Create(
@@ -352,9 +352,9 @@ internal static class RelationalSourceMapping
             .ToArray();
 
     public static IReadOnlyList<RuleSetRowData> MapRows(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
-        => rows.Select(static row =>
+        => rows.Select(static (row, rowIndex) =>
         {
-            var pkColumns = row.Keys.Where(static k => !IsColXxKey(k)).ToArray();
+            var pkColumns = row.Keys.Where(static k => !IsColXxKey(k) && !IsMetadataKey(k)).ToArray();
             PrimaryKeyValue? primaryKey = pkColumns.Length switch
             {
                 0 => null,
@@ -366,8 +366,16 @@ internal static class RelationalSourceMapping
                 .Where(static kvp => IsColXxKey(kvp.Key))
                 .ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
-            return new RuleSetRowData(primaryKey, colValues);
+            // Pokud SP vrátí sloupec Order, použije se jeho hodnota.
+            // Pokud ne (stará/cizí SP bez Order), použije se 1-based pozice řádku.
+            var order = row.TryGetValue("Order", out var orderValue) ? Convert.ToInt32(orderValue) : rowIndex + 1;
+
+            return new RuleSetRowData(primaryKey, colValues, order);
         }).ToArray();
+
+    private static bool IsMetadataKey(string key)
+        => string.Equals(key, "Order", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "SchemaCode", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsColXxKey(string key)
         => key.Length == 5

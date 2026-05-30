@@ -1,6 +1,7 @@
 using Xunit;
 using System.Data;
 using RuleEval.Abstractions;
+using RuleEval.Auditing;
 using RuleEval.Caching;
 using RuleEval.Core;
 using RuleEval.Database;
@@ -146,6 +147,70 @@ public sealed class RuleEvalIntegrationTests
                     }),
             ]);
 
+    [Fact]
+    public async Task AuditEvent_MatchedRuleOrder_ReflectsDbRowOrder()
+    {
+        // Sloupce mají Order 1,2,3 — to je pořadí sloupců, nesouvisí s Order pravidla.
+        // Řádky (pravidla) mají Order po 10: první=10, druhý=20.
+        // MatchedRuleIndex je vždy 0-based index v poli (0, 1, ...).
+        // MatchedRuleOrder musí odpovídat Order příslušného DB řádku (10 nebo 20).
+        // Test matchuje druhý řádek → MatchedRuleIndex=1, ale MatchedRuleOrder=20.
+        var definition = new DbRuleSetDefinition(
+            "pricing",
+            [
+                new RuleSetColumnDefinition("segment", 1, RuleFieldRole.Input,  1),
+                new RuleSetColumnDefinition("age",     2, RuleFieldRole.Input,  2),
+                new RuleSetColumnDefinition("formula", 3, RuleFieldRole.Output, 3),
+            ],
+            [
+                new RuleSetRowData(
+                    new PrimaryKeyValue("DataId", 100),
+                    new Dictionary<string, object?>
+                    {
+                        ["Col01"] = ".*Perspektiva.*",
+                        ["Col02"] = "INTERVAL<15;24>",
+                        ["Col03"] = "C2/240",
+                    },
+                    Order: 10),
+                new RuleSetRowData(
+                    new PrimaryKeyValue("DataId", 200),
+                    new Dictionary<string, object?>
+                    {
+                        ["Col01"] = ".*Standard.*",
+                        ["Col02"] = "INTERVAL<25;65>",
+                        ["Col03"] = "D3/120",
+                    },
+                    Order: 20),
+            ]);
+
+        var sink = new CapturingSink();
+        var inner = new RuleSetRepository(new StubSource(definition), new NoCacheRuleSetCache());
+        var auditing = new AuditingRuleSetRepository(
+            inner,
+            new AsyncLocalRuleSearchContextAccessor(),
+            [sink]);
+
+        // Vstup odpovídá druhému pravidlu (DB Order=20, 0-based index=1)
+        var result = await auditing.EvaluateFirstAsync(
+            "pricing",
+            EvaluationContext.FromPositional("7BN Standard Produkt", 30m));
+
+        Assert.Equal(EvaluationStatus.Matched, result.Status);
+        Assert.Equal("D3/120", result.Match?.Outputs[0].RawValue?.ToString());
+
+        var evt = Assert.Single(sink.Events);
+        Assert.Equal(EvaluationStatus.Matched, evt.Status);
+
+        // Index je 0-based pozice v poli pravidel — druhé pravidlo = 1
+        Assert.Equal(1, evt.MatchedRuleIndex);
+
+        // Order pochází z DB záznamu (10, 20, ...) — druhé pravidlo má Order=20, nikoli 1
+        Assert.Equal(20, evt.MatchedRuleOrder);
+
+        // PrimaryKey je identita DB řádku
+        Assert.Equal(200, evt.PrimaryKey?.Value);
+    }
+
     private sealed class StubSource : IRuleSetSource
     {
         private readonly DbRuleSetDefinition _definition;
@@ -199,11 +264,28 @@ public sealed class RuleEvalIntegrationTests
                 new Dictionary<string, object?>
                 {
                     ["TranslatorDataId"] = 42,
+                    ["Order"] = 10,
                     ["Col01"] = ".*Perspektiva.*",
                     ["Col02"] = "INTERVAL<15;24>",
                     ["Col03"] = "C2/240",
                 },
             ]);
         }
+    }
+
+    private sealed class CapturingSink : IRuleEvaluationAuditSink
+    {
+        public List<RuleEvaluationAuditEvent> Events { get; } = [];
+
+        public ValueTask OnEvaluatedAsync(RuleEvaluationAuditEvent auditEvent, CancellationToken cancellationToken = default)
+        {
+            Events.Add(auditEvent);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class AsyncLocalRuleSearchContextAccessor : IRuleSearchContextAccessor
+    {
+        public RuleSearchContext? Current { get; set; }
     }
 }

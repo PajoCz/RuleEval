@@ -10,7 +10,8 @@ public sealed record RuleSetColumnDefinition(
 
 public sealed record RuleSetRowData(
     PrimaryKeyValue? PrimaryKey,
-    IReadOnlyDictionary<string, object?> ColValues);
+    IReadOnlyDictionary<string, object?> ColValues,
+    int Order = 0);
 
 public sealed record DbRuleSetDefinition(
     string Key,
