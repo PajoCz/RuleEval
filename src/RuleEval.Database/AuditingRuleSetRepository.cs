@@ -174,6 +174,7 @@ public sealed class AuditingRuleSetRepository : IRuleSetRepository
             Status = result.Status,
             MatchedRuleName = result.Match?.Rule.Name,
             MatchedRuleIndex = result.Match?.RuleIndex,
+            MatchedRuleOrder = result.Match?.Rule.Order,
             PrimaryKey = result.Match?.PrimaryKey,
             Outputs = result.Match?.Outputs ?? [],
             BusinessContext = businessContext,

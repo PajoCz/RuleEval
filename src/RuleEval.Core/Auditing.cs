@@ -106,6 +106,12 @@ public sealed record RuleEvaluationAuditEvent
     /// <summary>Zero-based index of the matched rule within the rule set, if any.</summary>
     public int? MatchedRuleIndex { get; init; }
 
+    /// <summary>
+    /// The <c>Order</c> value of the matched rule as defined in the rule set (e.g. the DB row order).
+    /// Use this to identify which DB row was matched, independently of physical array position.
+    /// </summary>
+    public int? MatchedRuleOrder { get; init; }
+
     /// <summary>Primary key of the matched database row, if the rule set was loaded from a database source.</summary>
     public PrimaryKeyValue? PrimaryKey { get; init; }
 
